@@ -1,0 +1,651 @@
+<title>Guía Rápida del Radar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Literata:opsz,wght@7..72,400;7..72,600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --ground:      #ffffff;
+    --surface:     #f4f7fa;
+    --surface-2:   #e9eef5;
+    --ink:         #0f1620;
+    --ink-soft:    #4a5766;
+    --ink-faint:   #75828f;
+    --line:        #d9e1ea;
+    --line-soft:   #e8edf3;
+    --accent:      #1f6feb;
+    --accent-wash: #eaf1fd;
+
+    --verde:       #14804a;
+    --verde-wash:  #e3f5eb;
+    --ambar:       #a06a00;
+    --ambar-wash:  #fdf3e0;
+    --rojo:        #c0362c;
+    --rojo-wash:   #fdeceb;
+
+    --readout:     #131a24;
+    --readout-ink: #dde5ee;
+    --r: 4px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0d1218;
+      --surface:     #161d26;
+      --surface-2:   #1e2732;
+      --ink:         #e6ecf3;
+      --ink-soft:    #a3b0be;
+      --ink-faint:   #7b8896;
+      --line:        #2a3542;
+      --line-soft:   #212b36;
+      --accent:      #5c9bff;
+      --accent-wash: #16233a;
+      --verde:       #4ec98a;
+      --verde-wash:  #10281d;
+      --ambar:       #e0a94a;
+      --ambar-wash:  #2a2113;
+      --rojo:        #ff8579;
+      --rojo-wash:   #2e1715;
+      --readout:     #070b10;
+      --readout-ink: #cdd8e4;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0d1218;
+    --surface:     #161d26;
+    --surface-2:   #1e2732;
+    --ink:         #e6ecf3;
+    --ink-soft:    #a3b0be;
+    --ink-faint:   #7b8896;
+    --line:        #2a3542;
+    --line-soft:   #212b36;
+    --accent:      #5c9bff;
+    --accent-wash: #16233a;
+    --verde:       #4ec98a;
+    --verde-wash:  #10281d;
+    --ambar:       #e0a94a;
+    --ambar-wash:  #2a2113;
+    --rojo:        #ff8579;
+    --rojo-wash:   #2e1715;
+    --readout:     #070b10;
+    --readout-ink: #cdd8e4;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: Literata, Georgia, serif;
+    font-size: 17.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .marco { max-width: 34rem; margin: 0 auto; padding: 0 20px 80px; }
+
+  /* ---------- Portada ---------- */
+  .portada {
+    text-align: center;
+    padding: 56px 0 40px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 36px;
+  }
+  .portada .marca {
+    font-family: Archivo, sans-serif;
+    font-size: clamp(28px, 8vw, 38px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .portada .marca span { color: var(--accent); }
+  .portada .barra {
+    width: 52px; height: 3px; background: var(--accent);
+    margin: 16px auto; border-radius: 2px;
+  }
+  .portada .lema {
+    font-family: Archivo, sans-serif;
+    font-size: 15px; color: var(--ink-soft); margin: 0;
+  }
+  .portada .aviso {
+    margin-top: 26px; font-size: 13.5px; color: var(--ink-faint);
+    line-height: 1.5;
+  }
+
+  /* ---------- Secciones ---------- */
+  section { margin-bottom: 44px; scroll-margin-top: 16px; }
+
+  h2 {
+    font-family: Archivo, sans-serif;
+    font-weight: 700;
+    font-size: clamp(20px, 5vw, 25px);
+    letter-spacing: -0.015em;
+    line-height: 1.2;
+    margin: 0 0 16px;
+    padding-bottom: 9px;
+    border-bottom: 2px solid var(--accent);
+    text-wrap: balance;
+  }
+  h3 {
+    font-family: Archivo, sans-serif;
+    font-weight: 600;
+    font-size: 16px;
+    margin: 26px 0 8px;
+  }
+  p { margin: 0 0 14px; }
+  b, strong { font-weight: 600; }
+
+  /* ---------- Avisos de color ---------- */
+  .nota {
+    background: var(--accent-wash);
+    border-left: 4px solid var(--accent);
+    padding: 15px 17px;
+    border-radius: 0 var(--r) var(--r) 0;
+    margin: 0 0 16px;
+  }
+  .nota p:last-child { margin-bottom: 0; }
+  .nota.verde { background: var(--verde-wash); border-left-color: var(--verde); }
+  .nota.roja  { background: var(--rojo-wash);  border-left-color: var(--rojo); }
+  .nota.ambar { background: var(--ambar-wash); border-left-color: var(--ambar); }
+
+  .destacado {
+    font-family: Archivo, sans-serif;
+    font-size: 19px;
+    font-weight: 700;
+    line-height: 1.3;
+    color: var(--rojo);
+    margin: 0 0 8px;
+  }
+
+  /* ---------- Pasos numerados ---------- */
+  .pasos { list-style: none; padding: 0; counter-reset: p; margin: 0 0 16px; }
+  .pasos li {
+    counter-increment: p;
+    position: relative;
+    padding-left: 44px;
+    margin-bottom: 18px;
+  }
+  .pasos li::before {
+    content: counter(p);
+    position: absolute; left: 0; top: 1px;
+    width: 29px; height: 29px;
+    display: grid; place-items: center;
+    background: var(--accent); color: #fff;
+    border-radius: 50%;
+    font-family: Archivo, sans-serif;
+    font-size: 14px; font-weight: 700;
+  }
+  .pasos li b {
+    display: block;
+    font-family: Archivo, sans-serif;
+    font-size: 16.5px;
+    margin-bottom: 2px;
+  }
+
+  /* ---------- Listas de datos ---------- */
+  .filas { display: flex; flex-direction: column; gap: 1px; margin: 0 0 16px; }
+  .fila {
+    display: flex; gap: 14px; align-items: baseline;
+    padding: 11px 2px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .fila:last-child { border-bottom: none; }
+  .fila .que {
+    font-family: Archivo, sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+    flex: 0 0 33%;
+    min-width: 0;
+  }
+  .fila .val { flex: 1; min-width: 0; font-size: 16px; }
+  .fila .val small { display: block; color: var(--ink-faint); font-size: 13.5px; }
+
+  /* ---------- Bloqueos numerados ---------- */
+  .bloqueos { list-style: none; padding: 0; counter-reset: b; margin: 0 0 16px; }
+  .bloqueos li {
+    counter-increment: b;
+    position: relative;
+    padding: 11px 12px 11px 40px;
+    border-left: 3px solid var(--rojo);
+    background: var(--surface);
+    margin-bottom: 3px;
+    border-radius: 0 var(--r) var(--r) 0;
+    font-size: 16px;
+  }
+  .bloqueos li::before {
+    content: counter(b);
+    position: absolute; left: 13px; top: 12px;
+    font-family: Archivo, sans-serif;
+    font-weight: 700; font-size: 14px;
+    color: var(--rojo);
+  }
+
+  /* ---------- Semáforo ---------- */
+  .chip {
+    display: inline-block;
+    font-family: Archivo, sans-serif;
+    font-size: 12.5px; font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 3px 11px; border-radius: 20px;
+    white-space: nowrap;
+  }
+  .c-verde { background: var(--verde-wash); color: var(--verde); }
+  .c-ambar { background: var(--ambar-wash); color: var(--ambar); }
+  .c-rojo  { background: var(--rojo-wash);  color: var(--rojo); }
+
+  /* ---------- Ejemplo de alerta ---------- */
+  .alerta {
+    background: var(--readout);
+    color: var(--readout-ink);
+    padding: 17px 18px;
+    border-radius: var(--r);
+    border: 1px solid var(--line);
+    font-family: "IBM Plex Mono", Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-x: auto;
+    margin: 0 0 14px;
+  }
+  .alerta b { color: #fff; }
+  .alerta .v { color: #4ec98a; }
+  .alerta .a { color: #e0a94a; }
+  .alerta .d { color: #8695a6; }
+  .alerta .btn {
+    display: inline-block; background: var(--accent); color: #fff;
+    padding: 5px 12px; border-radius: 4px; font-weight: 600; margin-top: 4px;
+  }
+
+  .cierre {
+    text-align: center;
+    font-family: Archivo, sans-serif;
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.45;
+  }
+
+  .pie {
+    border-top: 1px solid var(--line);
+    padding-top: 20px;
+    color: var(--ink-faint);
+    font-family: Archivo, sans-serif;
+    font-size: 13.5px;
+    text-align: center;
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="marco">
+
+  <header class="portada">
+    <div class="marca">Crypto <span>Radar</span></div>
+    <div class="barra"></div>
+    <p class="lema">Guía rápida · Cómo funciona y cómo usarlo</p>
+    <p class="aviso">
+      Este sistema solo mira información pública.<br>
+      No compra, no vende y no puede tocar tu dinero.
+    </p>
+  </header>
+
+  <section>
+    <h2>¿Qué es esto?</h2>
+    <p>
+      Cada día nacen miles de monedas nuevas. Casi todas son malas y muchas
+      son trampas.
+    </p>
+    <p>
+      Este robot las mira <b>todas</b>, una por una, y te avisa solo de las
+      pocas que merecen que las mires tú.
+    </p>
+
+    <h3>Lo que sí hace</h3>
+    <div class="nota verde">
+      <p>
+        Descarta las monedas que son trampas: las que no puedes vender, las
+        que pueden congelar tu dinero, las que pueden fabricar más monedas
+        de la nada, o las que se quedan sin fondos de un día para otro.
+      </p>
+    </div>
+
+    <h3>Lo que no hace</h3>
+    <div class="nota roja">
+      <p>
+        <b>No adivina qué moneda va a subir.</b> Eso no lo sabe nadie, ni
+        este robot ni ninguna persona. Si alguien te dice lo contrario, te
+        está engañando.
+      </p>
+    </div>
+
+    <p>
+      Piénsalo así: es como un amigo que revisa el coche antes de que lo
+      compres. Te dice si el motor está roto. No te dice si vas a ser feliz
+      conduciéndolo.
+    </p>
+  </section>
+
+  <section>
+    <h2>Cómo trabaja</h2>
+    <p>Cada moneda pasa por cuatro filtros. Casi ninguna llega al final.</p>
+
+    <ol class="pasos">
+      <li>
+        <b>Las busca</b>
+        Cada 45 segundos mira si han nacido monedas nuevas.
+      </li>
+      <li>
+        <b>Tira las obvias</b>
+        Descarta las que tienen muy poco dinero dentro o casi nadie las
+        compra. Aquí se va más del 90%.
+      </li>
+      <li>
+        <b>Investiga las que quedan</b>
+        Mira quién la creó, cuánta gente la tiene, si se puede vender de
+        verdad y si el movimiento es real o inventado.
+      </li>
+      <li>
+        <b>La vigila después</b>
+        Aunque ya te haya avisado, la sigue mirando durante una semana. Si
+        algo se tuerce, te avisa otra vez.
+      </li>
+    </ol>
+
+    <div class="nota">
+      <p>
+        Hasta ahora ha mirado <b>48.430</b> monedas. Ha descartado
+        <b>47.176</b> y ha investigado a fondo <b>1.239</b>.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Las dos notas</h2>
+    <p>Cada moneda recibe dos notas, de 0 a 100. Nunca se mezclan.</p>
+
+    <div class="filas">
+      <div class="fila">
+        <div class="que">Oportunidad</div>
+        <div class="val">Cuánto interés tiene.<small>Cuanto más alto, mejor.</small></div>
+      </div>
+      <div class="fila">
+        <div class="que">Riesgo</div>
+        <div class="val">Cuánto peligro tiene.<small>Cuanto más bajo, mejor.</small></div>
+      </div>
+    </div>
+
+    <p>
+      Van separadas a propósito. Una moneda puede ser muy interesante
+      <b>y</b> muy peligrosa a la vez. Juntarlas en una sola nota te
+      escondería la mitad de la verdad.
+    </p>
+
+    <h3>El semáforo</h3>
+    <div class="filas">
+      <div class="fila">
+        <div class="que"><span class="chip c-verde">VERDE</span></div>
+        <div class="val">Sigue igual de bien que cuando te avisó.</div>
+      </div>
+      <div class="fila">
+        <div class="que"><span class="chip c-ambar">AMARILLO</span></div>
+        <div class="val">Algo ha empeorado. Míralo.</div>
+      </div>
+      <div class="fila">
+        <div class="que"><span class="chip c-rojo">ROJO</span></div>
+        <div class="val">Ha pasado algo grave. Te avisa aparte.</div>
+      </div>
+    </div>
+
+    <div class="nota ambar">
+      <p>
+        Si el robot no puede comprobar algo importante, <b>no te avisa</b>.
+        Prefiere callarse antes que decirte que algo es seguro sin estar
+        seguro.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Lo que bloquea siempre</h2>
+    <p>
+      Hay siete cosas que hacen que una moneda no te llegue nunca, aunque
+      todo lo demás esté perfecto:
+    </p>
+
+    <ol class="bloqueos">
+      <li>Puedes comprar pero <b>no puedes vender</b></li>
+      <li>Pueden <b>bloquear tu cuenta</b></li>
+      <li>Pueden <b>fabricar más monedas</b> y hundir el precio</li>
+      <li>Pueden <b>congelar</b> lo que tienes</li>
+      <li>Ya se han <b>llevado el dinero</b> del fondo</li>
+      <li>Entrar y salir <b>cuesta demasiado</b></li>
+      <li>No hay <b>ninguna forma de vender</b></li>
+    </ol>
+
+    <div class="nota roja">
+      <p>
+        Estas siete no se negocian. Da igual que la moneda parezca
+        buenísima: si cumple una sola de ellas, no te llega.
+      </p>
+    </div>
+
+    <p>
+      Aquí es donde este robot te ahorra dinero de verdad. No adivinando
+      ganadoras, sino apartándote de las trampas.
+    </p>
+  </section>
+
+  <section>
+    <h2>Cómo es un aviso</h2>
+
+    <div class="alerta"><b>OPORTUNIDAD · SAUCE</b>
+<span class="d">Solana · PumpSwap</span>
+
+Oportunidad <span class="v">72</span>   Riesgo <span class="a">38</span>   <span class="v">VERDE</span>
+
+Precio      $0,00041
+Liquidez    $47.200
+Compras/ventas  2,4 a 1
+
+<span class="d">─── Seguridad ───</span>
+<span class="v">✓</span> No pueden fabricar más
+<span class="v">✓</span> No pueden congelar
+<span class="v">✓</span> El dinero está bloqueado
+<span class="v">✓</span> Se puede vender
+
+<span class="d">─── Por qué ───</span>
++ Seguridad limpia
++ Entran 87 personas por hora
++ Se compra más de lo que se vende
+
+<span class="d">─── Riesgos ───</span>
+<span class="a">!</span> No tiene web ni redes
+
+<span class="btn">👉 COMPRAR ESTE TOKEN</span></div>
+
+    <p>
+      Al final siempre hay un botón para comprar y enlaces para que lo
+      compruebes tú misma.
+    </p>
+  </section>
+
+  <section>
+    <h2>Cuando llega un aviso</h2>
+
+    <ol class="pasos">
+      <li>
+        <b>Míralo con calma</b>
+        No hay prisa. Si una moneda solo sirve si entras en diez segundos,
+        no es una oportunidad, es una lotería.
+      </li>
+      <li>
+        <b>Lee las dos notas</b>
+        Oportunidad alta y riesgo bajo. Si el riesgo pasa de 60, piénsatelo
+        dos veces.
+      </li>
+      <li>
+        <b>Mira los riesgos que lista</b>
+        Están escritos en el propio aviso, uno por uno.
+      </li>
+      <li>
+        <b>Comprueba tú misma</b>
+        Pulsa el enlace del explorador. Ahí ves que la moneda existe de
+        verdad y desde cuándo.
+      </li>
+      <li>
+        <b>Usa el botón de comprar</b>
+        Nunca busques la moneda por su nombre. Es la regla más importante
+        de todas.
+      </li>
+    </ol>
+
+    <div class="nota">
+      <p>
+        El aviso te dice también <b>cuánto es razonable meter</b> en esa
+        moneda concreta. No es un adorno: por encima de esa cantidad, tu
+        propia compra mueve el precio en tu contra.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>La regla de oro</h2>
+
+    <div class="nota roja">
+      <p class="destacado">Nunca busques una moneda por su nombre.</p>
+      <p>Entra siempre desde el botón del aviso.</p>
+    </div>
+
+    <h3>Por qué</h3>
+    <p>
+      Cualquiera puede crear una moneda y ponerle el mismo nombre y el mismo
+      dibujo que otra. Es gratis y se hace en un minuto.
+    </p>
+    <p>
+      Cuando una moneda empieza a funcionar, aparecen copias falsas al
+      momento, hechas para que te confundas.
+    </p>
+
+    <h3>Cómo te protege el botón</h3>
+    <p>
+      Cada moneda tiene una dirección única, como un DNI. Dos monedas pueden
+      llamarse igual, pero <b>nunca</b> pueden tener la misma dirección.
+    </p>
+    <p>
+      El botón del aviso lleva esa dirección metida dentro. Al pulsarlo se
+      abre esa moneda exacta y ninguna otra. No hay que buscar nada, así que
+      no hay forma de equivocarse.
+    </p>
+
+    <div class="nota ambar">
+      <p>
+        <b>Y nunca</b> escribas tus 12 palabras secretas en ninguna página.
+        Ni yo, ni tu cartera, ni nadie te las va a pedir jamás.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>La página web</h2>
+    <p>Se abre en el móvil y en el ordenador. No hay que instalar nada.</p>
+
+    <div class="filas">
+      <div class="fila"><div class="que">Resumen</div><div class="val">Cómo va todo hoy.</div></div>
+      <div class="fila"><div class="que">Tokens</div><div class="val">Todo lo que ha visto, incluso lo que descartó y por qué.</div></div>
+      <div class="fila"><div class="que">Alertas</div><div class="val">Lo que te ha enviado y si te llegó.</div></div>
+      <div class="fila"><div class="que">Resultados</div><div class="val">Qué pasó después con cada aviso.</div></div>
+      <div class="fila"><div class="que">Sistema</div><div class="val">Con qué reglas está trabajando.</div></div>
+    </div>
+
+    <h3>La ficha de cada moneda</h3>
+    <p>
+      Pulsa cualquier moneda y verás todo: las dos notas, <b>todos</b> los
+      motivos uno por uno, los riesgos, los gráficos y de dónde salió cada
+      dato.
+    </p>
+    <p>
+      Nada está escondido. Si el robot dice algo, puedes ver por qué lo dice.
+    </p>
+
+    <h3>Para parar los avisos</h3>
+    <p>
+      En la pestaña <b>Sistema</b> hay un botón para pausarlos. El robot
+      sigue trabajando y guardándolo todo: solo deja de escribirte.
+    </p>
+  </section>
+
+  <section>
+    <h2>Cuántos avisos</h2>
+
+    <div class="filas">
+      <div class="fila"><div class="que">Al día</div><div class="val">10 como máximo</div></div>
+      <div class="fila"><div class="que">En una hora</div><div class="val">4 como máximo</div></div>
+      <div class="fila"><div class="que">De peligro</div><div class="val">12 al día como máximo</div></div>
+      <div class="fila"><div class="que">Repetidos</div><div class="val">La misma moneda, no antes de 2 horas</div></div>
+    </div>
+
+    <p>
+      Hay días con varios avisos y días con ninguno. <b>Un día en silencio
+      no es que esté roto</b>: es que no ha encontrado nada que merezca la
+      pena.
+    </p>
+
+    <div class="nota">
+      <p>
+        De cada 100 monedas que investiga a fondo, solo <b>1 o 2</b> pasan
+        el corte. Es así a propósito.
+      </p>
+    </div>
+
+    <p>
+      Si te parecen pocos avisos o demasiados, dímelo y lo ajusto en un
+      minuto. No hay que rehacer nada.
+    </p>
+  </section>
+
+  <section>
+    <h2>Para terminar</h2>
+
+    <h3>Lo más importante</h3>
+    <p>
+      Usa el robot para <b>descartar</b>, que es en lo que es bueno. No como
+      una orden de compra.
+    </p>
+    <p>
+      Una moneda que pasa todos los filtros sigue siendo una moneda nueva, y
+      las monedas nuevas son arriesgadas. El robot quita las trampas, no el
+      riesgo.
+    </p>
+
+    <div class="nota ambar">
+      <p>
+        Usa siempre una cartera aparte, con solo el dinero que estés
+        dispuesta a perder. Tus ahorros de verdad, en otra cartera que no
+        conectes nunca a ninguna página.
+      </p>
+    </div>
+
+    <h3>Los primeros días</h3>
+    <p>
+      Al principio, mira los avisos sin comprar. Fíjate en qué pasa después
+      con cada uno. Cuando entiendas cómo se comporta, decides tú.
+    </p>
+
+    <h3>Si algo no encaja</h3>
+    <p>
+      Si un aviso te parece raro, o algo no se entiende, pregúntame. Es mejor
+      preguntar que suponer.
+    </p>
+
+    <div class="nota verde">
+      <p class="cierre">
+        Sin prisa, con la cartera pequeña,<br>y siempre desde el botón.
+      </p>
+    </div>
+  </section>
+
+  <p class="pie">
+    Crypto Radar · Detección y análisis de monedas nuevas en Solana y Base.
+  </p>
+
+</div>

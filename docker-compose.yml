@@ -1,0 +1,100 @@
+# ==========================================================
+#  Crypto Radar - todo el sistema en un solo comando
+#
+#    docker compose up -d
+#
+#  Levanta: base de datos + radar (motor + panel web).
+#  Anade el perfil "publico" para tener HTTPS automatico con un dominio:
+#    docker compose --profile publico up -d
+# ==========================================================
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: radar-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: radar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-radar_local_password}
+      POSTGRES_DB: radar
+      TZ: Europe/Madrid
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U radar -d radar']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Solo accesible desde dentro; descomenta para conectarte con un cliente.
+    # ports:
+    #   - '127.0.0.1:5432:5432'
+    logging:
+      driver: json-file
+      options: { max-size: '10m', max-file: '3' }
+
+  radar:
+    build: .
+    container_name: radar-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://radar:${POSTGRES_PASSWORD:-radar_local_password}@db:5432/radar
+      NODE_ENV: production
+      TZ: Europe/Madrid
+    env_file:
+      - .env
+    # Con Caddy o Nginx delante, cambia esto por:
+    #   - '127.0.0.1:${PANEL_PORT:-3000}:3000'
+    # y el panel dejara de ser accesible directamente desde internet.
+    ports:
+      - '${PANEL_PORT:-3000}:3000'
+    volumes:
+      # Los filtros se editan en caliente sin reconstruir la imagen.
+      - ./config:/app/config:ro
+    logging:
+      driver: json-file
+      options: { max-size: '10m', max-file: '5' }
+
+  # HTTPS automatico. Solo si tienes un dominio apuntando al servidor.
+  caddy:
+    image: caddy:2-alpine
+    container_name: radar-caddy
+    restart: unless-stopped
+    profiles: ['publico']
+    depends_on: [radar]
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      DOMINIO: ${DOMINIO:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  # Alternativa a Caddy: Nginx delante del panel.
+  # HTTP simple, sin certificados. Util si prefieres Nginx o si no tienes
+  # dominio. Arrancar con:  docker compose --profile nginx up -d
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: radar-nginx
+    restart: unless-stopped
+    profiles: ['nginx']
+    depends_on: [radar]
+    ports:
+      - '${NGINX_PORT:-8080}:80'
+    volumes:
+      - ./nginx/radar.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/proxy_params_radar.conf:/etc/nginx/proxy_params_radar.conf:ro
+      - nginx_logs:/var/log/nginx
+    logging:
+      driver: json-file
+      options: { max-size: '10m', max-file: '3' }
+
+volumes:
+  db_data:
+  caddy_data:
+  caddy_config:
+  nginx_logs:

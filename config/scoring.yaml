@@ -1,0 +1,309 @@
+# ==========================================================
+#  SCORING - como se calculan la oportunidad y el riesgo
+#
+#  Hay DOS notas independientes, de 0 a 100:
+#    - riesgo      : cuanto peligro tiene el token (100 = maximo peligro)
+#    - oportunidad : cuanto interes tiene el token (100 = maximo interes)
+#
+#  Cada regla que se cumple suma sus puntos y deja escrito su motivo,
+#  que es lo que ves explicado en la alerta y en el panel.
+#
+#  Para dar mas o menos importancia a algo, cambia su "points".
+#  Para desactivar una regla, pon "enabled: false".
+# ==========================================================
+
+# Si el riesgo supera este valor, el token se marca como PELIGRO
+# y no se envia como oportunidad aunque puntue alto.
+risk_veto_threshold: 75
+
+# Etiquetas segun el riesgo final.
+risk_labels:
+  - { max: 20, label: "BAJO" }
+  - { max: 45, label: "MEDIO" }
+  - { max: 70, label: "ALTO" }
+  - { max: 100, label: "CRITICO" }
+
+# Etiquetas segun la oportunidad final.
+opportunity_labels:
+  - { max: 39, label: "DESCARTADO" }
+  - { max: 54, label: "OBSERVAR" }
+  - { max: 69, label: "INTERESANTE" }
+  - { max: 84, label: "FUERTE" }
+  - { max: 100, label: "MUY FUERTE" }
+
+# --------------------------------------------------------------------------
+#  REGLAS DE RIESGO  (suman peligro)
+# --------------------------------------------------------------------------
+risk:
+  mint_authority_active:
+    enabled: true
+    points: 30
+    reason: "El creador todavia puede emitir mas tokens (mint authority activa)."
+
+  freeze_authority_active:
+    enabled: true
+    points: 25
+    reason: "El creador puede congelar tus tokens (freeze authority activa)."
+
+  token2022_extensions:
+    enabled: true
+    points: 12
+    reason: "Token-2022 con extensiones: puede llevar comisiones o delegado permanente."
+
+  lp_not_locked:
+    enabled: true
+    points: 25
+    reason: "La liquidez no esta bloqueada ni quemada: se puede retirar en cualquier momento."
+
+  lp_partially_locked:
+    enabled: true
+    points: 10
+    threshold_pct: 80   # menos de este % bloqueado/quemado se considera parcial
+    reason: "Solo una parte de la liquidez esta bloqueada o quemada."
+
+  owner_can_modify:
+    enabled: true
+    points: 25
+    reason: "El contrato conserva funciones de owner (puede cambiar comisiones o permisos)."
+
+  blacklist_function:
+    enabled: true
+    points: 30
+    reason: "El contrato puede bloquear direcciones (blacklist): podrian impedirte vender."
+
+  high_or_mutable_tax:
+    enabled: true
+    points: 20
+    tax_warn_pct: 10
+    reason: "Comisiones de compra/venta altas o modificables por el creador."
+
+  honeypot:
+    enabled: true
+    points: 60
+    reason: "Deteccion de honeypot: se puede comprar pero no vender."
+
+  proxy_contract:
+    enabled: true
+    points: 15
+    reason: "Contrato proxy: el codigo se puede sustituir despues del lanzamiento."
+
+  not_verified:
+    enabled: true
+    points: 10
+    reason: "El contrato no esta verificado, no se puede revisar su codigo."
+
+  top10_concentration:
+    enabled: true
+    points: 25
+    warn_pct: 45        # a partir de aqui empieza a sumar
+    max_pct: 80         # aqui suma el maximo de puntos
+    reason: "Las 10 mayores wallets concentran demasiado suministro."
+
+  single_holder_dominant:
+    enabled: true
+    points: 20
+    warn_pct: 15
+    reason: "Una sola wallet (sin contar pool ni quemado) tiene una parte muy grande."
+
+  deployer_holds:
+    enabled: true
+    points: 20
+    warn_pct: 5
+    reason: "El creador conserva una parte importante del suministro."
+
+  deployer_bad_history:
+    enabled: true
+    points: 35
+    reason: "El creador ya lanzo antes tokens que acabaron mal."
+
+  deployer_serial:
+    enabled: true
+    points: 15
+    min_tokens: 4
+    reason: "El creador lanza tokens en serie (patron de fabrica de tokens)."
+
+  low_liquidity:
+    enabled: true
+    points: 20
+    floor_usd: 8000
+    reason: "Liquidez muy baja: cualquier venta mueve mucho el precio."
+
+  liquidity_removed:
+    enabled: true
+    points: 45
+    reason: "Se ha retirado liquidez del pool."
+
+  sniper_cluster:
+    enabled: true
+    points: 20
+    reason: "Varias wallets compraron en el mismo bloque, patron de bots o compra coordinada."
+
+  wash_trading:
+    enabled: true
+    points: 25
+    reason: "Operaciones repetidas entre las mismas direcciones: posible volumen inflado."
+
+  volume_without_holders:
+    enabled: true
+    points: 20
+    reason: "Mucho volumen pero casi no crecen los holders: volumen probablemente artificial."
+
+  sell_pressure_extreme:
+    enabled: true
+    points: 15
+    ratio: 2.0
+    reason: "Mucha mas venta que compra en la ultima hora."
+
+  no_social:
+    enabled: true
+    points: 5
+    reason: "El token no declara web ni redes sociales."
+
+# --------------------------------------------------------------------------
+#  REGLAS DE OPORTUNIDAD  (suman interes)
+# --------------------------------------------------------------------------
+opportunity:
+  base_score:
+    enabled: true
+    points: 25
+    reason: "Punto de partida: token nuevo detectado y analizado."
+
+  clean_security:
+    enabled: true
+    points: 20
+    reason: "Seguridad limpia: sin mint, sin freeze y sin permisos peligrosos."
+
+  lp_locked_or_burned:
+    enabled: true
+    points: 12
+    reason: "Liquidez bloqueada o quemada."
+
+  healthy_liquidity:
+    enabled: true
+    points: 10
+    min_usd: 15000
+    good_usd: 60000
+    reason: "Liquidez suficiente para operar con normalidad."
+
+  holder_growth:
+    enabled: true
+    points: 18
+    min_new_per_hour: 20
+    good_new_per_hour: 120
+    reason: "Los holders crecen a buen ritmo."
+
+  buy_pressure:
+    enabled: true
+    points: 15
+    min_ratio: 1.2
+    good_ratio: 2.5
+    reason: "Hay mas compras que ventas."
+
+  volume_growth:
+    enabled: true
+    points: 12
+    min_ratio: 0.15   # volumen 1h respecto al de 24h
+    reason: "El volumen se esta acelerando."
+
+  distributed_holders:
+    enabled: true
+    points: 12
+    good_top10_pct: 25
+    reason: "El suministro esta bien repartido entre muchas wallets."
+
+  deployer_clean:
+    enabled: true
+    points: 10
+    reason: "El creador no conserva suministro relevante ni tiene historial malo."
+
+  deployer_good_history:
+    enabled: true
+    points: 15
+    reason: "El creador ya lanzo antes algun token que funciono bien."
+
+  has_socials:
+    enabled: true
+    points: 8
+    reason: "El proyecto tiene web y redes sociales publicadas."
+
+  price_uptrend:
+    enabled: true
+    points: 10
+    min_pct_h1: 5
+    reason: "El precio sube de forma sostenida."
+
+  no_suspicious_activity:
+    enabled: true
+    points: 10
+    reason: "No se han detectado patrones de bots ni operaciones sospechosas."
+
+# --------------------------------------------------------------------------
+#  CONTEXTO DE MERCADO
+#
+#  El mismo movimiento no significa lo mismo con el mercado subiendo que
+#  cayendo. Se mide con SOL y ETH (24 h y 6 h) y se ajusta la exigencia.
+# --------------------------------------------------------------------------
+market_context:
+  enabled: true
+
+  # Multiplicador aplicado a la nota de oportunidad segun el estado general.
+  # Con el mercado fuerte se exige un poco mas, porque parte de la subida del
+  # token es simplemente marea general y no merito suyo.
+  factor_mercado_fuerte: 0.92
+  factor_mercado_neutral: 1.00
+  factor_mercado_debil: 0.90
+
+  # Puntos de riesgo anadidos cuando el mercado general esta cayendo:
+  # un token nuevo remando a contracorriente tiene mas papeletas de fallar.
+  riesgo_mercado_debil: 10
+
+  # Puntos de oportunidad si el token sube claramente MAS que el mercado.
+  # Es fuerza relativa: separa lo que sube por si mismo de lo que sube
+  # porque esta subiendo todo.
+  bonus_fuerza_relativa: 12
+  # Cuantos puntos porcentuales debe superar al mercado para contar.
+  fuerza_relativa_min_pct: 10
+
+# --------------------------------------------------------------------------
+#  VETOS CRITICOS
+#
+#  Estas condiciones BLOQUEAN el token pase lo que pase. No suman puntos de
+#  riesgo que luego puedan compensarse con oportunidad: vetan directamente.
+#  Un contrato del que no se puede salir no es "menos buena oportunidad":
+#  no es una oportunidad.
+#
+#  La lista es ampliable: anadir un codigo aqui basta para que vete.
+# --------------------------------------------------------------------------
+critical_vetoes:
+  enabled: true
+  codes:
+    - honeypot                 # no se puede vender
+    - blacklist_function       # pueden bloquear tu direccion
+    - mint_authority_active    # pueden crear suministro y diluirte
+    - freeze_authority_active  # pueden congelar tus tokens
+    - liquidity_removed        # ya han retirado liquidez
+    - no_operable              # el impacto en el precio hace imposible operar
+    - sin_ruta_de_venta        # Jupiter no encuentra forma de vender (Solana)
+
+# --------------------------------------------------------------------------
+#  EVALUABILIDAD
+#
+#  "No lo se" es una respuesta valida. Si faltan comprobaciones criticas, el
+#  token NO se envia como oportunidad: se marca como NO EVALUABLE.
+# --------------------------------------------------------------------------
+evaluability:
+  enabled: true
+  # Comprobaciones sin las cuales no se puede afirmar que un token es seguro.
+  required:
+    - analisis de seguridad
+    - estado de la liquidez (bloqueada o quemada)
+  # Si faltan mas de N comprobaciones de cualquier tipo, tampoco es evaluable.
+  max_missing: 3
+
+# --------------------------------------------------------------------------
+#  SEMAFORO
+#  VERDE = valida · AMARILLO = vigilar · ROJO = condicion critica
+# --------------------------------------------------------------------------
+traffic_light:
+  amarillo_desde_riesgo: 45
+  rojo_desde_riesgo: 70

@@ -1,0 +1,806 @@
+<title>Manual del Crypto Radar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Literata:opsz,wght@7..72,400;7..72,600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* ---------- Paleta: azul del panel, neutros con sesgo frío ---------- */
+  :root {
+    --ground:      #ffffff;
+    --surface:     #f4f7fa;
+    --surface-2:   #e9eef5;
+    --ink:         #0f1620;
+    --ink-soft:    #4a5766;
+    --ink-faint:   #75828f;
+    --line:        #d9e1ea;
+    --line-soft:   #e8edf3;
+    --accent:      #1f6feb;
+    --accent-ink:  #0b3d91;
+    --accent-wash: #eaf1fd;
+
+    /* Semánticos: son el semáforo real del sistema, no decoración */
+    --verde:       #14804a;
+    --verde-wash:  #e3f5eb;
+    --ambar:       #a86a00;
+    --ambar-wash:  #fdf3e0;
+    --rojo:        #c0362c;
+    --rojo-wash:   #fdeceb;
+
+    --readout:     #131a24;
+    --readout-ink: #dde5ee;
+
+    --col: 66ch;
+    --r: 3px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0d1218;
+      --surface:     #161d26;
+      --surface-2:   #1e2732;
+      --ink:         #e6ecf3;
+      --ink-soft:    #a3b0be;
+      --ink-faint:   #7b8896;
+      --line:        #2a3542;
+      --line-soft:   #212b36;
+      --accent:      #5c9bff;
+      --accent-ink:  #a8c8ff;
+      --accent-wash: #16233a;
+
+      --verde:       #4ec98a;
+      --verde-wash:  #10281d;
+      --ambar:       #e0a94a;
+      --ambar-wash:  #2a2113;
+      --rojo:        #ff8579;
+      --rojo-wash:   #2e1715;
+
+      --readout:     #070b10;
+      --readout-ink: #cdd8e4;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0d1218;
+    --surface:     #161d26;
+    --surface-2:   #1e2732;
+    --ink:         #e6ecf3;
+    --ink-soft:    #a3b0be;
+    --ink-faint:   #7b8896;
+    --line:        #2a3542;
+    --line-soft:   #212b36;
+    --accent:      #5c9bff;
+    --accent-ink:  #a8c8ff;
+    --accent-wash: #16233a;
+
+    --verde:       #4ec98a;
+    --verde-wash:  #10281d;
+    --ambar:       #e0a94a;
+    --ambar-wash:  #2a2113;
+    --rojo:        #ff8579;
+    --rojo-wash:   #2e1715;
+
+    --readout:     #070b10;
+    --readout-ink: #cdd8e4;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: Literata, Georgia, "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- Cabecera ---------- */
+  .cabecera {
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    padding: 40px 24px 32px;
+  }
+  .cabecera .caja {
+    max-width: 1180px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .marca {
+    font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
+    font-weight: 700;
+    font-size: clamp(30px, 5.5vw, 46px);
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .entradilla {
+    color: var(--ink-soft);
+    max-width: 62ch;
+    margin: 0;
+    font-size: 18px;
+  }
+
+  /* ---------- Estructura ---------- */
+  .cuerpo {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 24px 96px;
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    gap: 56px;
+    align-items: start;
+  }
+
+  .rail {
+    position: sticky;
+    top: 28px;
+    padding-top: 44px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .rail .rotulo {
+    font-family: Archivo, sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 8px;
+  }
+  .rail a {
+    font-family: Archivo, sans-serif;
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    text-decoration: none;
+    padding: 5px 10px;
+    border-left: 2px solid var(--line);
+    line-height: 1.35;
+    transition: color .12s, border-color .12s, background .12s;
+  }
+  .rail a:hover, .rail a:focus-visible {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    background: var(--accent-wash);
+  }
+
+  main { padding-top: 44px; min-width: 0; }
+
+  section { margin-bottom: 52px; scroll-margin-top: 24px; }
+
+  .eyebrow {
+    font-family: Archivo, sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  h2 {
+    font-family: Archivo, sans-serif;
+    font-weight: 700;
+    font-size: clamp(21px, 3vw, 27px);
+    letter-spacing: -0.012em;
+    line-height: 1.2;
+    margin: 0 0 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+    text-wrap: balance;
+  }
+  h3 {
+    font-family: Archivo, sans-serif;
+    font-weight: 600;
+    font-size: 16.5px;
+    letter-spacing: -0.005em;
+    margin: 26px 0 8px;
+    text-wrap: balance;
+  }
+
+  p, li { max-width: var(--col); }
+  p { margin: 0 0 14px; }
+  ul, ol { margin: 0 0 16px; padding-left: 20px; }
+  li { margin-bottom: 7px; }
+  b, strong { font-weight: 600; }
+
+  a { color: var(--accent); text-underline-offset: 2px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+  code, .mono {
+    font-family: "IBM Plex Mono", Consolas, monospace;
+    font-size: 0.87em;
+  }
+  code {
+    background: var(--surface-2);
+    padding: 1px 5px;
+    border-radius: var(--r);
+  }
+
+  /* ---------- Tablas ---------- */
+  .tabla-caja { overflow-x: auto; margin: 0 0 18px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: Archivo, sans-serif;
+    font-size: 14.5px;
+    min-width: 460px;
+  }
+  th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding: 0 14px 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  td {
+    padding: 11px 14px 11px 0;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+    color: var(--ink-soft);
+  }
+  td:first-child { color: var(--ink); font-weight: 500; }
+  .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ---------- Pasos numerados (solo donde hay secuencia real) ---------- */
+  .pasos { list-style: none; padding: 0; counter-reset: paso; display: flex; flex-direction: column; gap: 14px; }
+  .pasos li {
+    counter-increment: paso;
+    position: relative;
+    padding-left: 44px;
+    max-width: var(--col);
+    margin: 0;
+  }
+  .pasos li::before {
+    content: counter(paso);
+    position: absolute;
+    left: 0; top: 1px;
+    width: 27px; height: 27px;
+    display: grid; place-items: center;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    font-family: Archivo, sans-serif;
+    font-size: 13px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .pasos li b { display: block; font-family: Archivo, sans-serif; font-size: 15.5px; }
+
+  /* ---------- Avisos ---------- */
+  .nota {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-wash);
+    padding: 15px 18px;
+    margin: 0 0 18px;
+    border-radius: 0 var(--r) var(--r) 0;
+    max-width: var(--col);
+  }
+  .nota p:last-child { margin-bottom: 0; }
+  .nota.ambar { border-left-color: var(--ambar); background: var(--ambar-wash); }
+  .nota.roja  { border-left-color: var(--rojo);  background: var(--rojo-wash); }
+
+  /* ---------- Semáforo / vetos ---------- */
+  .chip {
+    display: inline-block;
+    font-family: Archivo, sans-serif;
+    font-size: 11.5px; font-weight: 600;
+    letter-spacing: 0.06em;
+    padding: 2px 9px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .c-verde { background: var(--verde-wash); color: var(--verde); }
+  .c-ambar { background: var(--ambar-wash); color: var(--ambar); }
+  .c-rojo  { background: var(--rojo-wash);  color: var(--rojo); }
+
+  .vetos { list-style: none; padding: 0; display: grid; gap: 1px; background: var(--line-soft); border: 1px solid var(--line-soft); border-radius: var(--r); overflow: hidden; }
+  .vetos li {
+    margin: 0; padding: 12px 15px;
+    background: var(--ground);
+    border-left: 3px solid var(--rojo);
+    max-width: none;
+    font-size: 15.5px;
+  }
+  .vetos b { font-family: Archivo, sans-serif; }
+  .vetos span { color: var(--ink-soft); }
+
+  /* ---------- Bloque de alerta (readout) ---------- */
+  .readout {
+    background: var(--readout);
+    color: var(--readout-ink);
+    padding: 18px 20px;
+    border-radius: var(--r);
+    font-family: "IBM Plex Mono", Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.62;
+    white-space: pre-wrap;
+    overflow-x: auto;
+    margin: 0 0 18px;
+    border: 1px solid var(--line);
+  }
+  .readout .t  { color: #fff; font-weight: 500; }
+  .readout .v  { color: #4ec98a; }
+  .readout .a  { color: #e0a94a; }
+  .readout .r  { color: #ff8579; }
+  .readout .d  { color: #8695a6; }
+
+  /* ---------- Tarjetas de límites ---------- */
+  .limites { display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); gap: 12px; margin: 0 0 18px; }
+  .limite {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    padding: 14px 16px;
+  }
+  .limite .cifra {
+    font-family: Archivo, sans-serif;
+    font-size: 28px; font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+  }
+  .limite .que {
+    font-family: Archivo, sans-serif;
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-top: 6px;
+    line-height: 1.35;
+  }
+
+  .pie {
+    border-top: 1px solid var(--line);
+    margin-top: 8px;
+    padding-top: 20px;
+    color: var(--ink-faint);
+    font-family: Archivo, sans-serif;
+    font-size: 13px;
+    max-width: var(--col);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+
+  /* ---------- Móvil ---------- */
+  @media (max-width: 860px) {
+    body { font-size: 16.5px; }
+    .cuerpo { grid-template-columns: 1fr; gap: 0; padding: 0 20px 72px; }
+    .cabecera { padding: 30px 20px 26px; }
+    .rail {
+      position: static;
+      padding: 26px 0 0;
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 7px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 22px;
+    }
+    .rail .rotulo { width: 100%; margin-bottom: 2px; }
+    .rail a {
+      border-left: none;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 13px;
+    }
+    main { padding-top: 30px; }
+    section { margin-bottom: 42px; }
+  }
+</style>
+
+<header class="cabecera">
+  <div class="caja">
+    <div class="marca">Crypto Radar · Solana y Base</div>
+    <h1>Manual del Crypto&nbsp;Radar</h1>
+    <p class="entradilla">
+      Cómo funciona el sistema, cómo leer lo que te envía y cómo ajustarlo a tu gusto.
+      Está escrito para leerse sin saber programar.
+    </p>
+  </div>
+</header>
+
+<div class="cuerpo">
+
+  <nav class="rail" aria-label="Secciones">
+    <div class="rotulo">Contenido</div>
+    <a href="#que-hace">Qué hace</a>
+    <a href="#funnel">Cómo funciona</a>
+    <a href="#notas">Las dos notas</a>
+    <a href="#vetos">Vetos críticos</a>
+    <a href="#semaforo">El semáforo</a>
+    <a href="#alerta">Leer una alerta</a>
+    <a href="#peligro">Avisos de peligro</a>
+    <a href="#discord">Discord en el móvil</a>
+    <a href="#cuantos">Cuántos avisos</a>
+    <a href="#panel">El panel</a>
+    <a href="#control">Pausar los avisos</a>
+    <a href="#ajustes">Ajustar el sistema</a>
+    <a href="#primeros-dias">Los primeros días</a>
+  </nav>
+
+  <main>
+
+    <section id="que-hace">
+      <span class="eyebrow">Punto de partida</span>
+      <h2>Qué hace este sistema</h2>
+      <p>
+        Vigila de forma continua los tokens que se crean en <b>Solana</b> y <b>Base</b>.
+        Revisa alrededor de <b>2.000 al día</b>, descarta más del 90 % porque no cumplen los
+        mínimos, y analiza a fondo solo los que merecen la pena.
+      </p>
+      <p>
+        De cada uno comprueba el mercado, la seguridad del contrato, quién lo creó, cómo está
+        repartido entre holders y si hay señales de manipulación. Con todo eso calcula dos notas
+        y te avisa únicamente de los que superan tus criterios.
+      </p>
+      <div class="nota">
+        <p>
+          <b>Lo importante:</b> el sistema no predice subidas, y nadie puede hacerlo. Lo que hace,
+          y hace bien, es <b>descartar los tokens que estructuralmente no pueden salir bien</b>:
+          los que permiten crear más suministro, congelar tus tokens, retirar la liquidez o los
+          que tienen el volumen inflado. Ahí es donde se pierde casi todo el dinero al empezar.
+        </p>
+      </div>
+      <div class="nota ambar">
+        <p>
+          El sistema <b>solo lee</b> información pública de la blockchain. No compra, no vende y
+          no tiene acceso a ninguna wallet ni a ningún fondo.
+        </p>
+      </div>
+    </section>
+
+    <section id="funnel">
+      <span class="eyebrow">El proceso, en orden</span>
+      <h2>Cómo funciona</h2>
+      <p>Cada token pasa por cuatro etapas. La mayoría no llega a la tercera.</p>
+      <ol class="pasos">
+        <li>
+          <b>Detección · cada 45 segundos</b>
+          Busca pools nuevas y tokens que empiezan a moverse en las dos cadenas.
+        </li>
+        <li>
+          <b>Filtro · inmediato</b>
+          Descarta por liquidez, volumen, operaciones y antigüedad. Cada descarte queda
+          guardado con su motivo, así que siempre puedes ver por qué se desechó algo.
+        </li>
+        <li>
+          <b>Análisis · solo los que pasan</b>
+          Seguridad del contrato, holders, creador, manipulación y coste real de operar.
+        </li>
+        <li>
+          <b>Seguimiento · 24 horas y 7 días</b>
+          Cada 5 minutos durante el primer día, luego cada hora durante una semana. Vigila
+          retiradas de liquidez, desplomes, ventas del creador y cambios en el contrato.
+        </li>
+      </ol>
+    </section>
+
+    <section id="notas">
+      <span class="eyebrow">Puntuación</span>
+      <h2>Las dos notas</h2>
+      <p>
+        Cada token recibe <b>dos puntuaciones independientes</b>, que nunca se mezclan en una sola.
+        Es a propósito: un token puede ser muy interesante y muy peligroso a la vez, y esconder eso
+        detrás de una media sería engañarte.
+      </p>
+      <div class="tabla-caja">
+        <table>
+          <tr><th>Oportunidad</th><th>Riesgo</th></tr>
+          <tr>
+            <td>
+              <span class="num">85–100</span> &nbsp;Muy fuerte<br>
+              <span class="num">70–84</span> &nbsp;&nbsp;Fuerte<br>
+              <span class="num">55–69</span> &nbsp;&nbsp;Interesante<br>
+              <span class="num">40–54</span> &nbsp;&nbsp;Observar<br>
+              <span class="num">0–39</span> &nbsp;&nbsp;&nbsp;Descartado
+            </td>
+            <td>
+              <span class="num">0–20</span> &nbsp;&nbsp;&nbsp;Bajo<br>
+              <span class="num">21–45</span> &nbsp;&nbsp;Medio<br>
+              <span class="num">46–70</span> &nbsp;&nbsp;Alto<br>
+              <span class="num">71–100</span> &nbsp;Crítico
+            </td>
+          </tr>
+        </table>
+      </div>
+      <p>
+        Si el riesgo pasa de <b>75</b>, el token queda vetado y no se envía como oportunidad
+        aunque puntúe muy alto. Y cuando el riesgo pasa de 50, la nota de oportunidad se rebaja
+        automáticamente.
+      </p>
+      <h3>Cuando falta información</h3>
+      <p>
+        Si no se pudo hacer alguna comprobación crítica, el token se marca como
+        <b>NO EVALUABLE</b> y no se envía. El sistema nunca da algo por seguro solo porque no
+        encontró el problema.
+      </p>
+    </section>
+
+    <section id="vetos">
+      <span class="eyebrow">Bloqueo automático</span>
+      <h2>Vetos críticos</h2>
+      <p>Estas siete condiciones <b>bloquean el token pase lo que pase</b>, aunque la oportunidad sea 100:</p>
+      <ul class="vetos">
+        <li><b>Honeypot</b> — <span>se puede comprar pero no vender</span></li>
+        <li><b>Blacklist</b> — <span>pueden bloquear tu dirección</span></li>
+        <li><b>Mint authority activa</b> — <span>pueden crear más suministro y diluirte</span></li>
+        <li><b>Freeze authority activa</b> — <span>pueden congelar tus tokens</span></li>
+        <li><b>Liquidez ya retirada</b> — <span>se han llevado el dinero del pool</span></li>
+        <li><b>Imposible de operar</b> — <span>entrar y salir costaría más de un 10 % solo por mover el precio</span></li>
+        <li><b>Sin ruta de venta</b> — <span>en Solana, si Jupiter no encuentra ninguna forma de vender</span></li>
+      </ul>
+    </section>
+
+    <section id="semaforo">
+      <span class="eyebrow">Estado en vivo</span>
+      <h2>El semáforo</h2>
+      <p>Cada token tiene un estado que cambia solo mientras se le vigila:</p>
+      <div class="tabla-caja">
+        <table>
+          <tr><th>Estado</th><th>Qué significa</th></tr>
+          <tr>
+            <td><span class="chip c-verde">VERDE</span></td>
+            <td>Sigue cumpliendo lo que decía cuando se te envió.</td>
+          </tr>
+          <tr>
+            <td><span class="chip c-ambar">AMARILLO</span></td>
+            <td>Algo ha empeorado. Merece que lo mires.</td>
+          </tr>
+          <tr>
+            <td><span class="chip c-rojo">ROJO</span></td>
+            <td>Ha aparecido una condición crítica. Recibes aviso aparte.</td>
+          </tr>
+        </table>
+      </div>
+    </section>
+
+    <section id="alerta">
+      <span class="eyebrow">Anatomía del mensaje</span>
+      <h2>Cómo leer una alerta</h2>
+      <p>Cada aviso trae siempre lo mismo, en el mismo orden:</p>
+      <div class="readout"><span class="t">OPORTUNIDAD · SAUCE (Solana · Raydium)</span>
+<span class="d">──────────────────────────────</span>
+Oportunidad  <span class="v">72</span> / 100     Riesgo  <span class="a">38</span> / 100     <span class="v">VERDE</span>
+
+Precio        $0,00041      Liquidez   $47.200
+Capitalización  $412.000    Volumen 24 h  $186.000
+Compras/ventas  2,4 a 1
+
+<span class="t">Coste real de operar</span>
+Entrar y salir con $200: <span class="v">1,8 %</span>   Importe máximo razonable: $1.400
+
+<span class="t">Seguridad</span>
+<span class="v">✓</span> Sin mint authority   <span class="v">✓</span> Sin freeze authority
+<span class="v">✓</span> Liquidez bloqueada   <span class="v">✓</span> Venta comprobada
+
+<span class="t">Holders</span>
+412 holders · top 10 concentra el 14,9 % · el creador no conserva nada
+
+<span class="t">Por qué es interesante</span>
++ Seguridad limpia, sin permisos peligrosos
++ Los holders crecen a ritmo de 87 por hora
++ Más compras que ventas
++ El suministro está bien repartido
+
+<span class="t">Qué riesgos tiene</span>
+<span class="a">!</span> Token-2022 con extensiones
+<span class="a">!</span> El proyecto no declara web ni redes sociales</div>
+      <p>
+        Al final del mensaje siempre hay enlaces directos a <b>DexScreener</b> y al explorador de
+        la cadena, para que puedas comprobar cualquier dato tú misma sin fiarte del sistema.
+      </p>
+      <h3>Los datos que más importan</h3>
+      <div class="tabla-caja">
+        <table>
+          <tr><th>Dato</th><th>Por qué importa</th></tr>
+          <tr><td>Liquidez</td><td>Es el dinero que hay para comprarte a ti cuando quieras salir. Poca liquidez significa que tu propia venta hunde el precio.</td></tr>
+          <tr><td>Coste real de operar</td><td>Lo que pierdes solo por entrar y salir. Si es alto, la operación empieza perdiendo.</td></tr>
+          <tr><td>Concentración del top 10</td><td>Descontando el pool y las direcciones de quemado. Si unas pocas wallets tienen mucho, pueden hundirlo cuando quieran.</td></tr>
+          <tr><td>Qué guarda el creador</td><td>Si conserva una parte grande, puede vender encima de ti.</td></tr>
+          <tr><td>Compras frente a ventas</td><td>Indica hacia dónde va la presión en ese momento.</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section id="peligro">
+      <span class="eyebrow">Protección posterior</span>
+      <h2>Avisos de peligro</h2>
+      <p>
+        Además de las oportunidades, el sistema envía avisos cuando algo empeora <b>después</b>
+        de haberte escrito: retiran liquidez, el creador vende, se desploma el precio, reactivan
+        el mint o el freeze, aparece una blacklist o suben las comisiones.
+      </p>
+      <div class="nota roja">
+        <p>
+          Estos avisos solo llegan de tokens que <b>antes</b> se te enviaron como oportunidad.
+          Avisarte del hundimiento de un token del que nunca se te habló no sirve de nada,
+          porque no lo tienes.
+        </p>
+      </div>
+      <p>
+        Cada 30 minutos el sistema vuelve a leer el contrato entero de los tokens que vigila.
+        No se fía de lo que comprobó el primer día.
+      </p>
+    </section>
+
+    <section id="discord">
+      <span class="eyebrow">Configuración · una sola vez</span>
+      <h2>Discord en el móvil</h2>
+      <p>
+        Los avisos llegan por Discord. Se eligió porque crear la cuenta solo pide un correo
+        electrónico —<b>no pide teléfono ni SMS</b>— y los mensajes llegan al móvil al instante.
+      </p>
+      <ol class="pasos">
+        <li>
+          <b>Crea la cuenta</b>
+          Entra en <a href="https://discord.com">discord.com</a> y regístrate con tu correo.
+        </li>
+        <li>
+          <b>Instala la aplicación en el móvil</b>
+          Está en App Store y en Google Play, y es gratis. Es lo que hace que los avisos
+          te lleguen al instante.
+        </li>
+        <li>
+          <b>Únete al canal</b>
+          Abre <a href="https://discord.gg/X9VPEY2x4">discord.gg/X9VPEY2x4</a> y entra.
+        </li>
+        <li>
+          <b>Activa las notificaciones</b>
+          Mantén pulsado el nombre del canal y elige <b>Notificaciones → Todos los mensajes</b>.
+          Sin este paso los avisos llegan igual, pero el móvil no te avisa.
+        </li>
+      </ol>
+      <div class="nota">
+        <p>
+          El acceso al panel web y su contraseña se envían aparte, en el mensaje privado.
+          No se publican aquí.
+        </p>
+      </div>
+    </section>
+
+    <section id="cuantos">
+      <span class="eyebrow">Volumen de avisos</span>
+      <h2>Cuántos avisos vas a recibir</h2>
+      <p>El sistema tiene límites para no llenarte el móvil. Son los valores de partida:</p>
+      <div class="limites">
+        <div class="limite">
+          <div class="cifra">10</div>
+          <div class="que">oportunidades al día, como máximo</div>
+        </div>
+        <div class="limite">
+          <div class="cifra">4</div>
+          <div class="que">oportunidades en la misma hora</div>
+        </div>
+        <div class="limite">
+          <div class="cifra">12</div>
+          <div class="que">avisos de peligro al día</div>
+        </div>
+        <div class="limite">
+          <div class="cifra">2 h</div>
+          <div class="que">antes de repetir el mismo token</div>
+        </div>
+      </div>
+      <p>
+        Si te parecen pocos o demasiados, se cambian en un momento y sin reconstruir nada.
+      </p>
+    </section>
+
+    <section id="panel">
+      <span class="eyebrow">Consulta</span>
+      <h2>El panel</h2>
+      <p>Se abre en el móvil y en el ordenador, y no hay que instalar nada.</p>
+      <div class="tabla-caja">
+        <table>
+          <tr><th>Pestaña</th><th>Qué encuentras</th></tr>
+          <tr><td>Resumen</td><td>Cómo va el sistema hoy: detectados, descartados, analizados y vigilados.</td></tr>
+          <tr><td>Tokens</td><td>Todo lo que ha visto, incluido lo descartado y el motivo de cada descarte.</td></tr>
+          <tr><td>Alertas</td><td>Lo que se ha enviado y si llegó bien.</td></tr>
+          <tr><td>Resultados</td><td>Qué pasó después con los tokens avisados, descontando costes.</td></tr>
+          <tr><td>Sistema</td><td>Qué criterios se aplican ahora mismo y estado de las fuentes.</td></tr>
+        </table>
+      </div>
+      <h3>La ficha de cada token</h3>
+      <p>
+        Al pulsar sobre cualquier token se abre su ficha completa: las dos notas, <b>todos</b> los
+        motivos uno por uno con los puntos que aporta cada uno, los riesgos detectados, los
+        gráficos de precio y liquidez, y qué fuentes respondieron. Nada es una caja negra.
+      </p>
+    </section>
+
+    <section id="control">
+      <span class="eyebrow">Control</span>
+      <h2>Pausar los avisos</h2>
+      <p>
+        Los avisos llegan por Discord mediante un webhook, que solo envía en un sentido: del
+        sistema hacia ti. <b>No hay comandos que escribir en el canal.</b> Todo se controla desde
+        el panel.
+      </p>
+      <p>
+        En la pestaña <b>Sistema</b> hay un botón <b>Pausar los avisos</b>. Vuelve a pulsarlo
+        para reanudarlos.
+      </p>
+      <div class="nota">
+        <p>
+          <b>Pausar no apaga nada.</b> El sistema sigue detectando, analizando, vigilando y
+          guardándolo todo mientras está pausado. Lo único que deja de hacer es escribirte.
+          Cuando reanudes, seguirás teniendo el histórico completo de esos días.
+        </p>
+      </div>
+    </section>
+
+    <section id="ajustes">
+      <span class="eyebrow">Personalización</span>
+      <h2>Ajustar el sistema</h2>
+      <p>
+        Los criterios están en dos ficheros de texto que se pueden editar. <b>No hace falta
+        reiniciar nada</b>: el sistema los recarga solo en menos de un minuto.
+      </p>
+      <div class="tabla-caja">
+        <table>
+          <tr><th>Si quieres…</th><th>Cambia esto</th></tr>
+          <tr><td>Recibir menos alertas, solo las mejores</td><td>Sube <code>min_opportunity_score</code></td></tr>
+          <tr><td>Recibir más alertas</td><td>Baja <code>min_opportunity_score</code> y <code>min_liquidity_usd</code></td></tr>
+          <tr><td>Ser más estricta con el riesgo</td><td>Baja <code>max_risk_score</code></td></tr>
+          <tr><td>Recibir menos avisos al día</td><td>Baja <code>max_alerts_per_day</code></td></tr>
+          <tr><td>Recibir menos avisos de peligro</td><td>Baja <code>max_danger_alerts_per_day</code></td></tr>
+          <tr><td>Solo tokens muy recientes</td><td>Baja <code>max_pair_age_hours</code></td></tr>
+          <tr><td>Vigilar solo una cadena</td><td>Deja una sola en <code>chains</code></td></tr>
+          <tr><td>Calcular costes con tu importe real</td><td>Ajusta <code>position_size_usd</code></td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section id="primeros-dias">
+      <span class="eyebrow">Qué esperar</span>
+      <h2>Los primeros días</h2>
+      <ol class="pasos">
+        <li>
+          <b>Día 1</b>
+          Empiezan a llegar avisos. Verás muchos tokens descartados: es lo correcto,
+          más del 90 % no cumple los mínimos.
+        </li>
+        <li>
+          <b>Primera semana</b>
+          Se acumulan las mediciones. Es el momento de ajustar los filtros si recibes
+          demasiados avisos o muy pocos.
+        </li>
+        <li>
+          <b>A partir del primer mes</b>
+          Ya hay suficientes datos para comparar los tokens de nota alta contra el conjunto
+          entero, que equivale a elegir al azar. Ahí es donde se ve si el sistema aporta algo.
+        </li>
+      </ol>
+      <div class="nota ambar">
+        <p>
+          <b>Recomendación final.</b> Usa el sistema para <b>descartar</b>, que es en lo que es
+          bueno, y no como una orden de compra. Un token que pasa todos los filtros sigue
+          siendo un token nuevo, y los tokens nuevos son arriesgados por naturaleza.
+          Comprueba siempre los enlaces antes de entrar.
+        </p>
+      </div>
+    </section>
+
+    <p class="pie">
+      Crypto Radar · detección y análisis de tokens en Solana y Base. El sistema solo lee
+      información pública de la blockchain: no compra, no vende y no tiene acceso a ninguna
+      wallet ni a ningún fondo.
+    </p>
+
+  </main>
+</div>

@@ -1,0 +1,66 @@
+# ==========================================================
+#  DIRECCIONES CONOCIDAS
+#
+#  Son direcciones que NO son holders reales y que hay que descontar
+#  antes de calcular la concentracion. Si no se descuentan, el "top 10"
+#  sale siempre altisimo y el dato no sirve para nada.
+#
+#  Puedes anadir mas direcciones sin tocar el codigo.
+# ==========================================================
+
+solana:
+  # Direcciones de quemado / sin dueno
+  burn:
+    - "1nc1nerator11111111111111111111111111111111"
+    - "11111111111111111111111111111111"
+
+  # Programas de DEX. El token que "tienen" es liquidez del pool.
+  programs:
+    raydium_amm_v4: "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
+    raydium_clmm: "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK"
+    raydium_cpmm: "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
+    orca_whirlpool: "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc"
+    meteora_dlmm: "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo"
+    meteora_pools: "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB"
+    pumpfun: "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
+    pumpswap: "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
+    token_program: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+    token_2022: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+
+  # Custodios / exchanges: tampoco son "un" holder real.
+  custodians:
+    - "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1"   # Binance
+    - "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"   # Coinbase
+
+base:
+  burn:
+    - "0x0000000000000000000000000000000000000000"
+    - "0x000000000000000000000000000000000000dEaD"
+    - "0x0000000000000000000000000000000000000001"
+
+  # Routers y factories: no son holders.
+  routers:
+    uniswap_v2_router: "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+    uniswap_v3_router: "0x2626664c2603336E57B271c5C0b26F421741e481"
+    uniswap_universal_router: "0x6fF5693b99212Da76ad316178A184AB56D299b43"
+    aerodrome_router: "0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43"
+
+  factories:
+    uniswap_v2_factory: "0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6"
+    uniswap_v3_factory: "0x33128a8fC17869897dcE68Ed026d694621f6FDfD"
+    aerodrome_factory: "0x420DD381b31aEf6683db6B902084cB0FFECe40Da"
+
+  # Contratos de bloqueo de liquidez conocidos. Si el LP token esta aqui,
+  # la liquidez esta bloqueada.
+  lockers:
+    unicrypt: "0xc4E637D37113192F4F1F060DaEbD7758De7F4131"
+    team_finance: "0xC77aab3c6D7dAb46248F3CC3033C856171878BD5"
+    pinklock: "0x71B5759d73262FBb223956913ecF4ecC51057641"
+    uncx_v3: "0x231278eDd38B00B07fBd52120CEf685B9BaEBCC1"
+
+  # Tokens de referencia (moneda del par).
+  quotes:
+    WETH: "0x4200000000000000000000000000000000000006"
+    USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    USDbC: "0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA"
+    DAI: "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb"

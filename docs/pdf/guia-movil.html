@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Guía rápida · Crypto Radar</title>
+<style>
+  /* Página con forma de móvil: se lee en el iPhone sin tener que ampliar. */
+  @page { size: 100mm 178mm; margin: 9mm 8mm 8mm 8mm; }
+
+  * {
+    box-sizing: border-box;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    font-family: "Segoe UI", -apple-system, Helvetica, Arial, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.55;
+    color: #16191d;
+    margin: 0;
+  }
+
+  h1 { font-size: 16pt; margin: 0 0 3mm; line-height: 1.15; letter-spacing: -0.3pt; }
+  h2 {
+    font-size: 12pt;
+    margin: 0 0 3mm;
+    padding-bottom: 1.5mm;
+    border-bottom: 1.2pt solid #1f6feb;
+    color: #0b3d91;
+    line-height: 1.2;
+  }
+  h3 { font-size: 10.5pt; margin: 4mm 0 1.5mm; color: #16191d; }
+  p  { margin: 0 0 2.5mm; }
+  ul, ol { margin: 0 0 3mm; padding-left: 5mm; }
+  li { margin-bottom: 1.5mm; }
+  b { font-weight: 600; }
+
+  .pagina { page-break-after: always; }
+  .pagina:last-child { page-break-after: auto; }
+
+  /* Portada */
+  .portada { text-align: center; padding-top: 38mm; }
+  .portada .marca { font-size: 22pt; font-weight: 700; letter-spacing: -0.6pt; }
+  .portada .marca span { color: #1f6feb; }
+  .portada .linea { width: 28mm; height: 1.2pt; background: #1f6feb; margin: 4mm auto; }
+  .portada .sub { font-size: 11pt; color: #5a636d; }
+  .portada .pie {
+    margin-top: 22mm; font-size: 9pt; color: #7a838d; line-height: 1.5;
+  }
+
+  .nota {
+    background: #eef4fd;
+    border-left: 2.5pt solid #1f6feb;
+    padding: 2.5mm 3mm;
+    margin: 0 0 3mm;
+    border-radius: 0 1mm 1mm 0;
+  }
+  .nota.verde { background: #e8f7ee; border-left-color: #17853f; }
+  .nota.roja  { background: #fdeceb; border-left-color: #c0362c; }
+  .nota.ambar { background: #fdf5e3; border-left-color: #a06a00; }
+  .nota p:last-child { margin-bottom: 0; }
+
+  .pasos { list-style: none; padding: 0; counter-reset: p; }
+  .pasos li {
+    counter-increment: p;
+    position: relative;
+    padding-left: 8mm;
+    margin-bottom: 2.5mm;
+  }
+  .pasos li::before {
+    content: counter(p);
+    position: absolute; left: 0; top: 0.3mm;
+    width: 5.5mm; height: 5.5mm;
+    background: #1f6feb; color: #fff;
+    border-radius: 50%;
+    font-size: 8pt; font-weight: 700;
+    text-align: center; line-height: 5.5mm;
+  }
+  .pasos li b { display: block; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin: 0 0 3mm; }
+  td { padding: 1.8mm 1.5mm; border-bottom: 0.4pt solid #dde2e8; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-weight: 600; white-space: nowrap; padding-right: 2.5mm; }
+
+  .chip {
+    display: inline-block; padding: 0.4mm 2mm; border-radius: 6pt;
+    font-size: 8.5pt; font-weight: 700;
+  }
+  .verde { background: #d4f2df; color: #0a6b2b; }
+  .ambar { background: #fbeecb; color: #7a5900; }
+  .rojo  { background: #ffe0dd; color: #97121a; }
+
+  .alerta {
+    background: #1b2027; color: #dfe4ea;
+    padding: 3mm; border-radius: 1.5mm;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 8pt; line-height: 1.45;
+    white-space: pre-wrap;
+    margin: 0 0 3mm;
+  }
+  .alerta b { color: #fff; }
+  .alerta .v { color: #4ec26b; }
+  .alerta .a { color: #d9a52c; }
+  .alerta .r { color: #ff8579; }
+  .alerta .d { color: #8a93a0; }
+
+  .grande { font-size: 12pt; font-weight: 700; color: #0b3d91; }
+  .dato { font-size: 9pt; color: #6a727b; }
+  .centro { text-align: center; }
+</style>
+</head>
+<body>
+
+<!-- ============ PORTADA ============ -->
+<div class="pagina portada">
+  <div class="marca">Crypto <span>Radar</span></div>
+  <div class="linea"></div>
+  <div class="sub">Guía rápida</div>
+  <div class="sub" style="font-size:9.5pt">Cómo funciona y cómo usarlo</div>
+  <div class="pie">
+    Este sistema solo mira información pública.<br>
+    No compra, no vende y no puede tocar tu dinero.
+  </div>
+</div>
+
+<!-- ============ QUÉ ES ============ -->
+<div class="pagina">
+  <h2>¿Qué es esto?</h2>
+
+  <p>
+    Cada día nacen miles de monedas nuevas. Casi todas son malas y muchas
+    son trampas.
+  </p>
+  <p>
+    Este robot las mira <b>todas</b>, una por una, y te avisa solo de las
+    pocas que merecen que las mires tú.
+  </p>
+
+  <h3>Lo que sí hace</h3>
+  <div class="nota verde">
+    <p>
+      Descarta las monedas que son trampas: las que no puedes vender, las
+      que pueden congelar tu dinero, las que pueden fabricar más monedas
+      de la nada, o las que se quedan sin fondos de un día para otro.
+    </p>
+  </div>
+
+  <h3>Lo que no hace</h3>
+  <div class="nota roja">
+    <p>
+      <b>No adivina qué moneda va a subir.</b> Eso no lo sabe nadie, ni
+      este robot ni ninguna persona. Si alguien te dice lo contrario, te
+      está engañando.
+    </p>
+  </div>
+
+  <p>
+    Piénsalo así: es como un amigo que revisa el coche antes de que lo
+    compres. Te dice si el motor está roto. No te dice si vas a ser feliz
+    conduciéndolo.
+  </p>
+</div>
+
+<!-- ============ CÓMO FUNCIONA ============ -->
+<div class="pagina">
+  <h2>Cómo trabaja</h2>
+
+  <p>Cada moneda pasa por cuatro filtros. Casi ninguna llega al final.</p>
+
+  <ol class="pasos">
+    <li>
+      <b>Las busca</b>
+      Cada 45 segundos mira si han nacido monedas nuevas.
+    </li>
+    <li>
+      <b>Tira las obvias</b>
+      Descarta las que tienen muy poco dinero dentro o casi nadie las
+      compra. Aquí se va más del 90%.
+    </li>
+    <li>
+      <b>Investiga las que quedan</b>
+      Mira quién la creó, cuánta gente la tiene, si se puede vender de
+      verdad y si el movimiento es real o inventado.
+    </li>
+    <li>
+      <b>La vigila después</b>
+      Aunque ya te haya avisado, la sigue mirando durante una semana. Si
+      algo se tuerce, te avisa otra vez.
+    </li>
+  </ol>
+
+  <div class="nota">
+    <p>
+      Hasta ahora ha mirado <b>48.430</b> monedas. Ha descartado
+      <b>47.176</b> y ha investigado a fondo <b>1.239</b>.
+    </p>
+  </div>
+</div>
+
+<!-- ============ LAS NOTAS ============ -->
+<div class="pagina">
+  <h2>Las dos notas</h2>
+
+  <p>Cada moneda recibe dos notas, de 0 a 100. Nunca se mezclan.</p>
+
+  <table>
+    <tr>
+      <td>Oportunidad</td>
+      <td>Cuánto interés tiene.<br><span class="dato">Cuanto más alto, mejor.</span></td>
+    </tr>
+    <tr>
+      <td>Riesgo</td>
+      <td>Cuánto peligro tiene.<br><span class="dato">Cuanto más bajo, mejor.</span></td>
+    </tr>
+  </table>
+
+  <p>
+    Van separadas a propósito. Una moneda puede ser muy interesante
+    <b>y</b> muy peligrosa a la vez. Juntarlas en una sola nota te
+    escondería la mitad de la verdad.
+  </p>
+
+  <h3>El semáforo</h3>
+  <table>
+    <tr>
+      <td><span class="chip verde">VERDE</span></td>
+      <td>Sigue igual de bien que cuando te avisó.</td>
+    </tr>
+    <tr>
+      <td><span class="chip ambar">AMARILLO</span></td>
+      <td>Algo ha empeorado. Míralo.</td>
+    </tr>
+    <tr>
+      <td><span class="chip rojo">ROJO</span></td>
+      <td>Ha pasado algo grave. Te avisa aparte.</td>
+    </tr>
+  </table>
+
+  <div class="nota ambar">
+    <p>
+      Si el robot no puede comprobar algo importante, <b>no te avisa</b>.
+      Prefiere callarse antes que decirte que algo es seguro sin estar
+      seguro.
+    </p>
+  </div>
+</div>
+
+<!-- ============ LO QUE BLOQUEA ============ -->
+<div class="pagina">
+  <h2>Lo que bloquea siempre</h2>
+
+  <p>
+    Hay siete cosas que hacen que una moneda no te llegue nunca, aunque
+    todo lo demás esté perfecto:
+  </p>
+
+  <table>
+    <tr><td>1</td><td>Puedes comprar pero <b>no puedes vender</b></td></tr>
+    <tr><td>2</td><td>Pueden <b>bloquear tu cuenta</b></td></tr>
+    <tr><td>3</td><td>Pueden <b>fabricar más monedas</b> y hundir el precio</td></tr>
+    <tr><td>4</td><td>Pueden <b>congelar</b> lo que tienes</td></tr>
+    <tr><td>5</td><td>Ya se han <b>llevado el dinero</b> del fondo</td></tr>
+    <tr><td>6</td><td>Entrar y salir <b>cuesta demasiado</b></td></tr>
+    <tr><td>7</td><td>No hay <b>ninguna forma de vender</b></td></tr>
+  </table>
+
+  <div class="nota roja">
+    <p>
+      Estas siete no se negocian. Da igual que la moneda parezca
+      buenísima: si cumple una sola de ellas, no te llega.
+    </p>
+  </div>
+
+  <p>
+    Aquí es donde este robot te ahorra dinero de verdad. No adivinando
+    ganadoras, sino apartándote de las trampas.
+  </p>
+</div>
+
+<!-- ============ LA ALERTA ============ -->
+<div class="pagina">
+  <h2>Cómo es un aviso</h2>
+
+  <div class="alerta"><b>OPORTUNIDAD · SAUCE</b>
+<span class="d">Solana · PumpSwap</span>
+
+Oportunidad <span class="v">72</span>   Riesgo <span class="a">38</span>   <span class="v">VERDE</span>
+
+Precio      $0,00041
+Liquidez    $47.200
+Compras/ventas  2,4 a 1
+
+<span class="d">─── Seguridad ───</span>
+<span class="v">✓</span> No pueden fabricar más
+<span class="v">✓</span> No pueden congelar
+<span class="v">✓</span> El dinero está bloqueado
+<span class="v">✓</span> Se puede vender
+
+<span class="d">─── Por qué ───</span>
++ Seguridad limpia
++ Entran 87 personas por hora
++ Se compra más de lo que se vende
+
+<span class="d">─── Riesgos ───</span>
+<span class="a">!</span> No tiene web ni redes
+
+<b>👉 COMPRAR ESTE TOKEN</b></div>
+
+  <p>
+    Al final siempre hay un botón para comprar y enlaces para que lo
+    compruebes tú misma.
+  </p>
+</div>
+
+<!-- ============ QUÉ HACER ============ -->
+<div class="pagina">
+  <h2>Cuando llega un aviso</h2>
+
+  <ol class="pasos">
+    <li>
+      <b>Míralo con calma</b>
+      No hay prisa. Si una moneda solo sirve si entras en diez segundos,
+      no es una oportunidad, es una lotería.
+    </li>
+    <li>
+      <b>Lee las dos notas</b>
+      Oportunidad alta y riesgo bajo. Si el riesgo pasa de 60, piénsatelo
+      dos veces.
+    </li>
+    <li>
+      <b>Mira los riesgos que lista</b>
+      Están escritos en el propio aviso, uno por uno.
+    </li>
+    <li>
+      <b>Comprueba tú misma</b>
+      Pulsa el enlace del explorador. Ahí ves que la moneda existe de
+      verdad y desde cuándo.
+    </li>
+    <li>
+      <b>Usa el botón de comprar</b>
+      Nunca busques la moneda por su nombre. Explicado en la página
+      siguiente.
+    </li>
+  </ol>
+
+  <div class="nota">
+    <p>
+      El aviso te dice también <b>cuánto es razonable meter</b> en esa
+      moneda concreta. No es un adorno: por encima de esa cantidad, tu
+      propia compra mueve el precio en tu contra.
+    </p>
+  </div>
+</div>
+
+<!-- ============ LA REGLA DE ORO ============ -->
+<div class="pagina">
+  <h2>La regla de oro</h2>
+
+  <div class="nota roja">
+    <p class="grande" style="color:#97121a">
+      Nunca busques una moneda por su nombre.
+    </p>
+    <p>Entra siempre desde el botón del aviso.</p>
+  </div>
+
+  <h3>Por qué</h3>
+  <p>
+    Cualquiera puede crear una moneda y ponerle el mismo nombre y el mismo
+    dibujo que otra. Es gratis y se hace en un minuto.
+  </p>
+  <p>
+    Cuando una moneda empieza a funcionar, aparecen copias falsas al
+    momento, hechas para que te confundas.
+  </p>
+
+  <h3>Cómo te protege el botón</h3>
+  <p>
+    Cada moneda tiene una dirección única, como un DNI. Dos monedas pueden
+    llamarse igual, pero <b>nunca</b> pueden tener la misma dirección.
+  </p>
+  <p>
+    El botón del aviso lleva esa dirección metida dentro. Al pulsarlo se
+    abre esa moneda exacta y ninguna otra. No hay que buscar nada, así que
+    no hay forma de equivocarse.
+  </p>
+
+  <div class="nota ambar">
+    <p>
+      <b>Y nunca</b> escribas tus 12 palabras secretas en ninguna página.
+      Ni yo, ni tu cartera, ni nadie te las va a pedir jamás.
+    </p>
+  </div>
+</div>
+
+<!-- ============ EL PANEL ============ -->
+<div class="pagina">
+  <h2>La página web</h2>
+
+  <p>Se abre en el móvil y en el ordenador. No hay que instalar nada.</p>
+
+  <table>
+    <tr><td>Resumen</td><td>Cómo va todo hoy.</td></tr>
+    <tr><td>Tokens</td><td>Todo lo que ha visto, incluso lo que descartó y por qué.</td></tr>
+    <tr><td>Alertas</td><td>Lo que te ha enviado y si te llegó.</td></tr>
+    <tr><td>Resultados</td><td>Qué pasó después con cada aviso.</td></tr>
+    <tr><td>Sistema</td><td>Con qué reglas está trabajando.</td></tr>
+  </table>
+
+  <h3>La ficha de cada moneda</h3>
+  <p>
+    Pulsa cualquier moneda y verás todo: las dos notas, <b>todos</b> los
+    motivos uno por uno, los riesgos, los gráficos y de dónde salió cada
+    dato.
+  </p>
+  <p>
+    Nada está escondido. Si el robot dice algo, puedes ver por qué lo dice.
+  </p>
+
+  <h3>Para parar los avisos</h3>
+  <p>
+    En la pestaña <b>Sistema</b> hay un botón para pausarlos. El robot
+    sigue trabajando y guardándolo todo: solo deja de escribirte.
+  </p>
+</div>
+
+<!-- ============ CUÁNTOS AVISOS ============ -->
+<div class="pagina">
+  <h2>Cuántos avisos</h2>
+
+  <table>
+    <tr><td>Al día</td><td>10 como máximo</td></tr>
+    <tr><td>En una hora</td><td>4 como máximo</td></tr>
+    <tr><td>De peligro</td><td>12 al día como máximo</td></tr>
+    <tr><td>Repetidos</td><td>La misma moneda, no antes de 2 horas</td></tr>
+  </table>
+
+  <p>
+    Hay días con varios avisos y días con ninguno. <b>Un día en silencio
+    no es que esté roto</b>: es que no ha encontrado nada que merezca la
+    pena.
+  </p>
+
+  <div class="nota">
+    <p>
+      De cada 100 monedas que investiga a fondo, solo <b>1 o 2</b> pasan
+      el corte. Es así a propósito.
+    </p>
+  </div>
+
+  <p>
+    Si te parecen pocos avisos o demasiados, dímelo y lo ajusto en un
+    minuto. No hay que rehacer nada.
+  </p>
+</div>
+
+<!-- ============ FINAL ============ -->
+<div class="pagina">
+  <h2>Para terminar</h2>
+
+  <h3>Lo más importante</h3>
+  <p>
+    Usa el robot para <b>descartar</b>, que es en lo que es bueno. No como
+    una orden de compra.
+  </p>
+  <p>
+    Una moneda que pasa todos los filtros sigue siendo una moneda nueva, y
+    las monedas nuevas son arriesgadas. El robot quita las trampas, no el
+    riesgo.
+  </p>
+
+  <div class="nota ambar">
+    <p>
+      Usa siempre una cartera aparte, con solo el dinero que estés
+      dispuesta a perder. Tus ahorros de verdad, en otra cartera que no
+      conectes nunca a ninguna página.
+    </p>
+  </div>
+
+  <h3>Los primeros días</h3>
+  <p>
+    Al principio, mira los avisos sin comprar. Fíjate en qué pasa después
+    con cada uno. Cuando entiendas cómo se comporta, decides tú.
+  </p>
+
+  <h3>Si algo no encaja</h3>
+  <p>
+    Si un aviso te parece raro, o algo no se entiende, pregúntame. Es mejor
+    preguntar que suponer.
+  </p>
+
+  <div class="nota verde">
+    <p class="centro">
+      <b>Sin prisa, con la cartera pequeña,<br>y siempre desde el botón.</b>
+    </p>
+  </div>
+</div>
+
+</body>
+</html>

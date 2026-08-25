@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Crypto Radar — Manual de uso</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 16mm 16mm; }
+
+  * {
+    box-sizing: border-box;
+    /* Sin esto Chrome elimina los fondos de color al imprimir y los bloques
+       de ejemplo de alerta saldrian en blanco. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.55;
+    color: #1a1d21;
+    margin: 0;
+  }
+
+  h1 { font-size: 20pt; margin: 0 0 4pt; letter-spacing: -0.4pt; }
+  h2 {
+    font-size: 13.5pt;
+    margin: 20pt 0 8pt;
+    padding-bottom: 4pt;
+    border-bottom: 1.5pt solid #1f6feb;
+    color: #0b2e6f;
+    page-break-after: avoid;
+  }
+  h3 { font-size: 11pt; margin: 13pt 0 5pt; color: #24292f; page-break-after: avoid; }
+  p { margin: 0 0 7pt; }
+  ul, ol { margin: 0 0 8pt; padding-left: 16pt; }
+  li { margin-bottom: 3pt; }
+
+  code {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 9pt;
+    background: #f2f4f7;
+    padding: 1pt 3pt;
+    border-radius: 2pt;
+  }
+
+  table { width: 100%; border-collapse: collapse; margin: 8pt 0 12pt; font-size: 9.5pt; }
+  th {
+    background: #eef2f7;
+    text-align: left;
+    padding: 5pt 7pt;
+    border: 0.5pt solid #c9d3e0;
+    font-weight: 600;
+  }
+  td { padding: 5pt 7pt; border: 0.5pt solid #d8dee6; vertical-align: top; }
+  tr { page-break-inside: avoid; }
+
+  .portada {
+    text-align: center;
+    padding: 55mm 0 0;
+    page-break-after: always;
+  }
+  .portada .marca { font-size: 30pt; font-weight: 700; letter-spacing: -1pt; }
+  .portada .marca span { color: #1f6feb; }
+  .portada .sub { font-size: 13pt; color: #57606a; margin-top: 6pt; }
+  .portada .linea { width: 60mm; height: 2pt; background: #1f6feb; margin: 14pt auto; }
+  .portada .pie { margin-top: 20mm; font-size: 9.5pt; color: #6e7781; }
+
+  .aviso {
+    border-left: 3pt solid #1f6feb;
+    background: #f5f8fc;
+    padding: 8pt 11pt;
+    margin: 10pt 0;
+    page-break-inside: avoid;
+  }
+  .aviso.rojo { border-left-color: #cf222e; background: #fef4f4; }
+  .aviso.ambar { border-left-color: #bf8700; background: #fffaf0; }
+  .aviso p:last-child { margin-bottom: 0; }
+
+  .alerta {
+    background: #1c2128;
+    color: #dfe3e8;
+    padding: 10pt 12pt;
+    border-radius: 3pt;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 8.5pt;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    page-break-inside: avoid;
+    margin: 8pt 0;
+  }
+  .alerta b { color: #fff; }
+  .alerta .v { color: #4ac26b; }
+  .alerta .a { color: #d4a72c; }
+  .alerta .r { color: #ff7b72; }
+
+  .semaforo { display: inline-block; padding: 1pt 7pt; border-radius: 8pt; font-size: 9pt; font-weight: 600; }
+  .s-verde  { background: #d5f5dd; color: #0a6b2b; }
+  .s-ambar  { background: #fdf0cd; color: #7a5900; }
+  .s-rojo   { background: #ffe3e0; color: #97121a; }
+
+  .pasos { counter-reset: paso; padding-left: 0; list-style: none; }
+  .pasos li { counter-increment: paso; position: relative; padding-left: 20pt; margin-bottom: 6pt; }
+  .pasos li::before {
+    content: counter(paso);
+    position: absolute; left: 0; top: 0.5pt;
+    width: 14pt; height: 14pt;
+    background: #1f6feb; color: #fff;
+    border-radius: 50%;
+    font-size: 8.5pt; font-weight: 700;
+    text-align: center; line-height: 14pt;
+  }
+  .nueva-pagina { page-break-before: always; }
+  .juntos { page-break-inside: avoid; }
+  .pie-doc { margin-top: 16pt; padding-top: 8pt; border-top: 0.5pt solid #d8dee6; font-size: 8.5pt; color: #6e7781; }
+</style>
+</head>
+<body>
+
+<div class="portada">
+  <div class="marca">Crypto <span>Radar</span></div>
+  <div class="linea"></div>
+  <div class="sub">Manual de uso</div>
+  <div class="sub" style="font-size:10.5pt">Deteccion y analisis de tokens en Solana y Base</div>
+  <div class="pie">
+    Sistema de deteccion, analisis y alertas.<br>
+    Solo lee informacion publica de la blockchain: no compra, no vende<br>
+    y no tiene acceso a ninguna wallet ni a ningun fondo.
+  </div>
+</div>
+
+<h1>Tus accesos</h1>
+
+<table>
+  <tr><th style="width:26%">Panel web</th>
+      <td><code>https://crypto-radar.duckdns.org</code></td></tr>
+  <tr><th>Contrasena</th><td><i>se envia aparte, por mensaje privado</i></td></tr>
+  <tr><th>Canal de avisos</th><td><code>https://discord.gg/X9VPEY2x4</code></td></tr>
+</table>
+
+<div class="aviso ambar">
+  <p>
+    <b>El enlace del panel es temporal.</b> Mientras el sistema funcione en el
+    ordenador del desarrollador, esa direccion cambia cada vez que se reinicia.
+    Al pasar al servidor tendras una direccion fija y definitiva. El canal de
+    Discord, en cambio, ya es permanente.
+  </p>
+</div>
+
+<h3>Discord en el movil, una sola vez</h3>
+<ol class="pasos">
+  <li>Crea una cuenta en <code>discord.com</code> con tu correo. No pide telefono.</li>
+  <li>Instala la aplicacion de Discord en el movil. Es gratis.</li>
+  <li>Abre el enlace del canal y unete.</li>
+  <li><b>Manten pulsado el nombre del canal y elige Notificaciones, Todos los mensajes.</b>
+      Sin este paso los avisos llegan, pero el movil no te avisa.</li>
+</ol>
+
+<div class="nueva-pagina"></div>
+
+<h1>Que hace este sistema</h1>
+<p>
+  El sistema vigila de forma continua los tokens que se crean en <b>Solana</b> y <b>Base</b>.
+  Revisa unos <b>2.000 al dia</b>, descarta mas del 90% porque no cumplen los minimos, y
+  analiza a fondo solo los que merecen la pena.
+</p>
+<p>
+  De cada uno comprueba el mercado, la seguridad del contrato, quien lo creo, como esta
+  repartido entre holders y si hay senales de manipulacion. Con todo eso calcula dos notas
+  y te avisa unicamente de los que superan tus criterios.
+</p>
+
+<div class="aviso">
+  <p>
+    <b>Lo importante:</b> el sistema no predice subidas, y nadie puede hacerlo. Lo que hace,
+    y hace bien, es <b>descartar los tokens que estructuralmente no pueden salir bien</b>:
+    los que permiten crear mas suministro, congelar tus tokens, retirar la liquidez o los
+    que tienen el volumen inflado. Ahi es donde se pierde casi todo el dinero al empezar.
+  </p>
+</div>
+
+<h2>Como funciona, en cuatro pasos</h2>
+<table>
+  <tr>
+    <th style="width:22%">Etapa</th><th style="width:20%">Cada cuanto</th><th>Que hace</th>
+  </tr>
+  <tr>
+    <td><b>1. Deteccion</b></td><td>45 segundos</td>
+    <td>Busca pools nuevas y tokens que empiezan a moverse en las dos cadenas.</td>
+  </tr>
+  <tr>
+    <td><b>2. Filtro</b></td><td>inmediato</td>
+    <td>Descarta por liquidez, volumen, operaciones y antiguedad. Cada descarte queda guardado con su motivo.</td>
+  </tr>
+  <tr>
+    <td><b>3. Analisis</b></td><td>solo los que pasan</td>
+    <td>Seguridad, holders, creador, manipulacion y coste real de operar.</td>
+  </tr>
+  <tr>
+    <td><b>4. Seguimiento</b></td><td>5 min durante 24 h,<br>luego cada hora, 7 dias</td>
+    <td>Vigila retiradas de liquidez, desplomes, ventas del creador y cambios en el contrato.</td>
+  </tr>
+</table>
+
+<h2>Las dos notas</h2>
+<p>
+  Cada token recibe <b>dos puntuaciones independientes</b>, que nunca se mezclan en una sola.
+  Es a proposito: un token puede ser muy interesante y muy peligroso a la vez, y esconder eso
+  detras de una media seria enganarte.
+</p>
+
+<div class="juntos">
+<table>
+  <tr><th style="width:50%">Oportunidad (0-100)</th><th>Riesgo (0-100)</th></tr>
+  <tr>
+    <td>
+      85-100 &nbsp; MUY FUERTE<br>
+      70-84 &nbsp;&nbsp; FUERTE<br>
+      55-69 &nbsp;&nbsp; INTERESANTE<br>
+      40-54 &nbsp;&nbsp; OBSERVAR<br>
+      0-39 &nbsp;&nbsp;&nbsp; DESCARTADO
+    </td>
+    <td>
+      0-20 &nbsp;&nbsp;&nbsp; BAJO<br>
+      21-45 &nbsp;&nbsp; MEDIO<br>
+      46-70 &nbsp;&nbsp; ALTO<br>
+      71-100 &nbsp; CRITICO
+    </td>
+  </tr>
+</table>
+</div>
+
+<p>
+  Si el riesgo pasa de <b>75</b>, el token queda vetado y no se envia como oportunidad
+  aunque puntue muy alto. Y cuando el riesgo pasa de 50, la nota de oportunidad se rebaja
+  automaticamente.
+</p>
+
+<h3>Vetos criticos</h3>
+<p>Estas condiciones <b>bloquean el token pase lo que pase</b>, aunque la oportunidad sea 100:</p>
+<ul>
+  <li><b>Honeypot</b> — se puede comprar pero no vender</li>
+  <li><b>Blacklist</b> — pueden bloquear tu direccion</li>
+  <li><b>Mint authority activa</b> — pueden crear mas suministro y diluirte</li>
+  <li><b>Freeze authority activa</b> — pueden congelar tus tokens</li>
+  <li><b>Liquidez ya retirada</b></li>
+  <li><b>Imposible de operar</b> — entrar y salir costaria mas de un 10% solo por mover el precio</li>
+  <li><b>Sin ruta de venta</b> — en Solana, si Jupiter no encuentra ninguna forma de vender el token</li>
+</ul>
+
+<h3>El semaforo</h3>
+<p>Cada token tiene un estado que cambia solo mientras se le vigila:</p>
+<table>
+  <tr>
+    <td style="width:26%"><span class="semaforo s-verde">VERDE</span></td>
+    <td>Oportunidad valida. Sin riesgos criticos y con todas las comprobaciones hechas.</td>
+  </tr>
+  <tr>
+    <td><span class="semaforo s-ambar">AMARILLO</span></td>
+    <td>Riesgo aumentado, o faltan comprobaciones importantes. Conviene revisarlo.</td>
+  </tr>
+  <tr>
+    <td><span class="semaforo s-rojo">ROJO</span></td>
+    <td>Condicion critica detectada. No entrar, o salir si ya estabas dentro.</td>
+  </tr>
+</table>
+
+<div class="aviso ambar">
+  <p>
+    <b>"No lo se" es una respuesta valida.</b> Si el sistema no puede comprobar algo
+    importante, marca el token como <b>NO EVALUABLE</b> y no te lo envia como oportunidad.
+    Nunca da por seguro algo solo porque no ha encontrado el problema.
+  </p>
+</div>
+
+<div class="nueva-pagina"></div>
+<h1>Como leer una alerta</h1>
+<p>Todas las alertas tienen la misma estructura. Este es un ejemplo real:</p>
+
+<div class="alerta">⭐ <b>PEPE</b> · Solana · raydium
+
+<b>Oportunidad 72/100</b> (FUERTE)   <span class="a">🟡 Riesgo 28/100</span> (MEDIO)
+Estado: <span class="v"><b>🟢 VERDE</b></span>
+
+<b>Mercado</b>
+Precio: $0.0000412   Cap: $412.0K
+Liquidez: $48.2K   Volumen 24 h: $186.3K
+Compras/ventas 1 h: 142 / 61   Precio 1 h: +18.4%
+Edad del par: 2h 14min
+Coste de entrar y salir: <b>1.66%</b> con 200 USD (maximo razonable 482 USD)
+
+<b>Seguridad</b>
+Mint authority: <span class="v">✅ revocada</span>
+Freeze authority: <span class="v">✅ revocada</span>
+Liquidez: <span class="v">✅ asegurada al 100%</span>
+
+<b>Holders</b>
+Total: 412
+Top 10 real: 22.4% (sin pool ni quemado)
+El creador conserva: 1.2%
+Crecimiento: 87 holders/hora
+
+<b>Por que es interesante</b>
+<span class="v">✅ Seguridad limpia: sin mint, sin freeze y sin permisos peligrosos
+✅ Los holders crecen a ritmo de 87 por hora
+✅ Mas compras que ventas: 142 frente a 61 (2.3 a 1)
+✅ Suministro bien repartido: el top 10 real solo tiene el 22.4%</span>
+
+<b>Riesgos detectados</b>
+<span class="a">⚠️ Liquidez de 48.2K USD: una venta grande mueve el precio</span></div>
+
+<h3>Los datos que mas importan</h3>
+<table>
+  <tr><th style="width:32%">Dato</th><th>Que significa</th></tr>
+  <tr>
+    <td><b>Top 10 real</b></td>
+    <td>Cuanto concentran las 10 mayores wallets, <b>descontando el pool de liquidez y las
+    direcciones de quemado</b>. Sin ese descuento el numero sale siempre por encima del 85%
+    en cualquier token y no sirve para nada. Cuanto mas bajo, mejor repartido.</td>
+  </tr>
+  <tr>
+    <td><b>Coste de entrar y salir</b></td>
+    <td>Cuanto mueve el precio tu propia operacion. Si pone 8%, el token tiene que subir un
+    8% solo para que recuperes lo puesto. Tambien te dice el importe maximo razonable.</td>
+  </tr>
+  <tr>
+    <td><b>El creador conserva</b></td>
+    <td>Que porcentaje del suministro sigue en manos de quien lo creo. Cuanto mas alto, mas
+    facil es que lo venda de golpe.</td>
+  </tr>
+  <tr>
+    <td><b>Liquidez asegurada</b></td>
+    <td>Si esta bloqueada o quemada no se puede retirar. Si pone "no confirmado", el sistema
+    no ha podido comprobarlo y lo cuenta como riesgo.</td>
+  </tr>
+</table>
+
+<h3>Avisos de peligro</h3>
+<p>
+  Ademas de las oportunidades, el sistema vigila los tokens ya detectados y avisa cuando algo
+  empeora, <b>aunque en su momento no te lo enviara como oportunidad</b>:
+</p>
+<div class="alerta"><span class="r">🔴 <b>AVISO · PEPE</b></span> · Solana
+
+<span class="r">• Se ha retirado liquidez: queda un 62% menos de la que deberia haber
+• El precio ha caido un 41% en 5 minutos</span>
+
+Liquidez actual: $18.1K   Riesgo: 88/100 (CRITICO)</div>
+<p>Estos avisos son los que evitan que te quedes dentro de algo que se esta hundiendo.</p>
+
+<div class="nueva-pagina"></div>
+<h1>El panel web</h1>
+<table>
+  <tr><th style="width:24%">Pagina</th><th>Para que sirve</th></tr>
+  <tr><td><b>Resumen</b></td><td>Cuantos tokens se han detectado, analizado y descartado hoy, las mejores oportunidades y las ultimas alertas.</td></tr>
+  <tr><td><b>Tokens</b></td><td>Todo lo que el sistema ha visto, <b>incluido lo descartado y por que</b>. Con buscador y filtros por cadena, estado y puntuacion.</td></tr>
+  <tr><td><b>Alertas</b></td><td>Historico de avisos enviados, y si se entregaron correctamente.</td></tr>
+  <tr><td><b>Resultados</b></td><td>Que paso <b>realmente</b> con cada token detectado. Aqui es donde se comprueba si el sistema acierta.</td></tr>
+  <tr><td><b>Sistema</b></td><td>Configuracion activa, estado de las fuentes de datos y velocidad del sistema.</td></tr>
+</table>
+
+<h3>La ficha de cada token</h3>
+<p>Al pulsar sobre un token se abre su ficha completa, con:</p>
+<ul>
+  <li>Las dos notas y <b>todos los motivos</b>, con los puntos que aporta cada uno</li>
+  <li>Los vetos criticos, si los hay</li>
+  <li>Graficos de precio, liquidez y holders</li>
+  <li>El informe de seguridad completo, y <b>que fuentes respondieron y cuales no</b></li>
+  <li>Los mayores holders, etiquetados (wallet, pool, quemado, creador)</li>
+  <li>Datos del creador y su historial</li>
+  <li>Que paso a los 5 min, 15 min, 1 h, 6 h y 24 h, con el resultado <b>descontando costes</b></li>
+  <li>Los cambios detectados despues de la deteccion</li>
+</ul>
+<p>
+  Nada es una caja negra: si un token puntua 72, puedes ver exactamente por que, con que
+  informacion y a que hora se comprobo cada cosa.
+</p>
+
+<h2>Ajustar el sistema a tu gusto</h2>
+<p>
+  Los criterios estan en dos ficheros de texto que puedes editar. <b>No hace falta reiniciar
+  nada</b>: el sistema los recarga solo en menos de un minuto.
+</p>
+<table>
+  <tr><th style="width:38%">Si quieres...</th><th>Cambia esto</th></tr>
+  <tr><td>Recibir menos alertas, solo las mejores</td><td>Sube <code>min_opportunity_score</code></td></tr>
+  <tr><td>Recibir mas alertas</td><td>Baja <code>min_opportunity_score</code> y <code>min_liquidity_usd</code></td></tr>
+  <tr><td>Ser mas estricto con el riesgo</td><td>Baja <code>max_risk_score</code></td></tr>
+  <tr><td>Solo tokens muy recientes</td><td>Baja <code>max_pair_age_hours</code></td></tr>
+  <tr><td>Vigilar solo una cadena</td><td>Deja una sola en <code>chains</code></td></tr>
+  <tr><td>Calcular costes con tu importe real</td><td>Ajusta <code>position_size_usd</code></td></tr>
+  <tr><td>Recibir menos avisos al dia</td><td>Baja <code>max_alerts_per_day</code></td></tr>
+  <tr><td>Recibir menos avisos de peligro</td><td>Baja <code>max_danger_alerts_per_day</code></td></tr>
+</table>
+
+<h2>Como controlar el sistema</h2>
+<p>
+  Los avisos llegan por Discord mediante un webhook, que solo envia en un sentido:
+  del sistema hacia ti. <b>No hay comandos que escribir en el canal.</b> Todo se
+  controla desde el panel web.
+</p>
+<table>
+  <tr><th style="width:34%">Si quieres...</th><th>Donde</th></tr>
+  <tr><td>Ver como va el sistema hoy</td><td>Pestana <b>Sistema</b></td></tr>
+  <tr><td>Ver las mejores oportunidades</td><td>Pestana <b>Tokens</b>, ordenadas por oportunidad</td></tr>
+  <tr><td>Ver las ultimas alertas enviadas</td><td>Pestana <b>Alertas</b>, con si se entregaron o no</td></tr>
+  <tr><td>Ver que criterios se aplican ahora</td><td>Pestana <b>Sistema</b></td></tr>
+  <tr><td><b>Dejar de recibir avisos</b></td><td>Pestana <b>Sistema</b>, boton <b>Pausar los avisos</b></td></tr>
+</table>
+<div class="aviso">
+  <p>
+    <b>Pausar no apaga nada.</b> El sistema sigue detectando, analizando, vigilando y
+    guardandolo todo mientras esta pausado. Lo unico que deja de hacer es escribirte.
+    Cuando pulses <b>Reanudar</b>, seguiras teniendo el historico completo de esos dias.
+  </p>
+</div>
+
+<h2>Cuantos avisos vas a recibir</h2>
+<p>
+  El sistema tiene limites para no llenarte el movil. Son los valores de partida
+  y se cambian en un momento:
+</p>
+<table>
+  <tr><th style="width:46%">Limite</th><th>Valor</th></tr>
+  <tr><td>Oportunidades al dia</td><td>maximo <b>10</b></td></tr>
+  <tr><td>Oportunidades en la misma hora</td><td>maximo <b>4</b></td></tr>
+  <tr><td>Avisos de peligro al dia</td><td>maximo <b>12</b></td></tr>
+  <tr><td>Repetir el mismo token</td><td>no antes de <b>2 horas</b></td></tr>
+</table>
+<p>
+  Los avisos de peligro solo llegan de tokens que <b>antes</b> se enviaron como
+  oportunidad. Avisar del hundimiento de un token del que nunca se hablo no sirve
+  de nada, porque no se tiene.
+</p>
+<h2>Que esperar los primeros dias</h2>
+<ol class="pasos">
+  <li><b>Dia 1.</b> Empiezan a llegar alertas. Veras muchos tokens descartados: es lo correcto, mas del 90% no cumple los minimos.</li>
+  <li><b>Primera semana.</b> Se acumulan las mediciones. Ajusta los filtros si recibes demasiadas alertas o muy pocas.</li>
+  <li><b>Semanas 2 y 3.</b> La pagina <b>Resultados</b> empieza a tener sentido: ya se puede ver si los tokens con nota alta rinden mejor que los de nota baja.</li>
+</ol>
+<div class="aviso ambar">
+  <p>
+    La pagina <b>Resultados</b> estara casi vacia al principio, y es normal: cada token se
+    sigue durante varios dias y solo al cerrarse se calcula su resultado. Es la parte que
+    mas gana con el tiempo.
+  </p>
+</div>
+
+<h2>Recomendacion final</h2>
+<p>
+  Usa el sistema sobre todo para <b>descartar</b>, no solo para entrar. La mayor parte de su
+  valor no esta en encontrar el token que multiplica por diez: esta en los que te evita tocar.
+</p>
+
+<div class="aviso rojo">
+  <p>
+    <b>Aviso.</b> Esta herramienta detecta, analiza y avisa. Te da informacion para decidir
+    mejor, pero <b>no garantiza beneficios ni te dice que comprar</b>. Ningun sistema
+    automatico puede hacerlo. La decision siempre es tuya.
+  </p>
+</div>
+
+<div class="pie-doc">
+  Crypto Radar — Manual de uso · El sistema solo lee informacion publica de la blockchain.
+  No compra, no vende y no tiene acceso a wallets ni a fondos.
+</div>
+
+</body>
+</html>

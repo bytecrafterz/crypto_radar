@@ -1,0 +1,9 @@
+# Los scripts se ejecutan en Linux: hay que forzar finales de linea LF.
+# Si se suben con finales de linea de Windows (CRLF), bash falla con
+# errores del tipo "bad interpreter" o "command not found".
+*.sh text eol=lf
+Dockerfile text eol=lf
+Caddyfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sql text eol=lf

@@ -1,0 +1,135 @@
+# ==========================================================
+#  FILTROS - que tokens entran en el sistema
+#  Puedes editar este archivo y reiniciar; no hace falta tocar codigo.
+# ==========================================================
+
+# --- Etapa 0: descubrimiento ---------------------------------------------
+discovery:
+  # Cada cuantos segundos se buscan pares nuevos.
+  interval_seconds: 45
+  # Cadenas activas. Quita una de la lista para desactivarla.
+  chains: [solana, base]
+  # Fuentes de descubrimiento (todas gratuitas y sin clave).
+  sources: [dexscreener, geckoterminal]
+
+# --- Etapa 1: filtro barato ----------------------------------------------
+# Solo se gastan llamadas caras (RPC, holders, seguridad) en los tokens
+# que superan ESTE filtro. Es lo que permite funcionar con planes gratuitos.
+prefilter:
+  # Antiguedad maxima del par, en horas. Mas viejo = ya no es "temprano".
+  max_pair_age_hours: 72
+  # Antiguedad minima, en minutos. Evita analizar pools recien creadas
+  # todavia sin liquidez ni operaciones.
+  min_pair_age_minutes: 3
+  # Liquidez minima en USD. Por debajo casi siempre es ruido o trampa.
+  min_liquidity_usd: 4000
+  # Liquidez maxima en USD. Por encima ya no es "etapa temprana".
+  max_liquidity_usd: 3000000
+  # Volumen minimo en las ultimas 24 h (o desde que existe el par).
+  min_volume_h24_usd: 3000
+  # Numero minimo de operaciones en la ultima hora.
+  min_txns_h1: 12
+  # Numero minimo de compradores distintos estimados en 24 h.
+  min_buys_h24: 15
+  # Relacion volumen/liquidez. Muy alta = probable wash trading.
+  max_volume_liquidity_ratio: 60
+  # Market cap maximo en USD (0 = sin limite).
+  max_market_cap_usd: 20000000
+  # Rechaza pares cuya moneda base no sea una de estas.
+  quote_whitelist:
+    solana: [SOL, USDC, USDT]
+    base: [WETH, ETH, USDC, USDbC, DAI]
+
+# --- Etapa 2: enriquecimiento --------------------------------------------
+enrichment:
+  # Maximo de tokens analizados a fondo por hora y por dia.
+  #
+  # El tope por hora tambien sirve para REPARTIR el presupuesto diario. Con
+  # 60/hora se gastaban los 500 del dia en unas ocho horas y el sistema se
+  # quedaba parado el resto de la jornada, justo cuando podian aparecer los
+  # mejores tokens. 55/hora x 24 h encaja con el tope diario sin agotarlo
+  # antes de tiempo.
+  #
+  # El consumo real de las APIs con estos valores va muy holgado: ninguna
+  # de las fuentes gratuitas se acerca a su limite.
+  max_per_hour: 55
+  max_per_day: 1200
+  # Cuantos holders del top se guardan por token.
+  top_holders_to_store: 20
+  # Bloques hacia atras que se leen en Base para reconstruir holders.
+  # 43200 bloques ~= 24 h en Base (2 s por bloque).
+  base_max_blocks_lookback: 43200
+  # Tamano de cada consulta de logs en Base (limite tipico del plan gratis).
+  base_log_chunk_blocks: 2000
+
+# --- Etapa 3: seguimiento -------------------------------------------------
+monitoring:
+  # Cada cuanto se re-mide un token vigilado (minutos).
+  interval_minutes: 5
+  # Durante cuantas horas se vigila de forma intensiva.
+  intensive_hours: 24
+  # Despues, cada cuanto (minutos) hasta que caduca.
+  slow_interval_minutes: 60
+  # Cuantos dias en total se sigue un token antes de archivarlo.
+  total_days: 7
+  # Cuantos tokens como maximo se vigilan a la vez.
+  max_tracked_tokens: 150
+  # Caida de liquidez (%) que dispara alerta inmediata de rug pull.
+  liquidity_drop_alert_pct: 20
+  # Caida de precio (%) en 5 minutos que dispara alerta.
+  price_crash_alert_pct: 35
+
+# --- Alertas --------------------------------------------------------------
+alerts:
+  # Score de oportunidad minimo para avisar por Discord.
+  min_opportunity_score: 55
+  # Score de riesgo maximo. Por encima no se avisa (salvo alertas de peligro).
+  max_risk_score: 60
+  # No repetir la misma alerta del mismo token antes de N minutos.
+  cooldown_minutes: 120
+
+  # Topes de oportunidad: por hora Y por dia.
+  # Solo el de por hora no servia de nada: 12 a la hora permiten casi 300
+  # avisos diarios. El tope diario es el que respeta lo prometido al usuario
+  # (entre 3 y 10 al dia). El de por hora los reparte a lo largo del dia en
+  # vez de gastarlos todos en la primera hora buena.
+  max_alerts_per_hour: 4
+  max_alerts_per_day: 10
+
+  # Enviar tambien alertas de peligro (rug, retirada de liquidez, venta del
+  # creador).
+  send_danger_alerts: true
+
+  # Solo avisar del hundimiento de tokens que SI se le enviaron como
+  # oportunidad. Advertirle de un token del que nunca le hablamos no le
+  # sirve de nada, porque no lo tiene, y era el grueso del ruido.
+  danger_only_for_alerted: true
+
+  # Estos avisos no tenian ningun tope: bastaban unos cuantos tokens cayendo
+  # a la vez para llenarle el movil.
+  max_danger_alerts_per_hour: 4
+  max_danger_alerts_per_day: 12
+
+# --- Ejecucion realista ---------------------------------------------------
+# El precio que se ve no es el precio al que se puede comprar. Estos valores
+# definen con que tamano de posicion se evalua el impacto en el precio.
+execution:
+  # Con cuanto dinero se simula la entrada, en USD. Ponlo en lo que sueles mover.
+  position_size_usd: 200
+  # Impacto maximo aceptable en una sola pata (compra o venta), en %.
+  max_impact_pct: 2
+  # Si entrar y salir costaria mas de este % solo por mover el precio,
+  # el token se considera no operable y queda vetado.
+  veto_round_trip_pct: 10
+
+# --- Invalidacion de oportunidades ----------------------------------------
+# Cuando una oportunidad deja de serlo, aunque el precio no se haya movido.
+invalidation:
+  # Horas tras las cuales una oportunidad detectada deja de considerarse vigente.
+  max_hours_valid: 24
+  # Si el volumen de 1 h cae por debajo de este % de su maximo, se invalida.
+  min_volume_pct_of_peak: 15
+  # Si la liquidez cae por debajo de este % de su maximo, se invalida.
+  min_liquidity_pct_of_peak: 60
+  # Cada cuantos minutos se vuelven a comprobar permisos y comisiones.
+  recheck_security_minutes: 30

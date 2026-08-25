@@ -1,0 +1,19 @@
+# HTTPS automatico para el panel.
+# Solo hace falta si tienes un dominio apuntando al servidor.
+# Pon DOMINIO=tudominio.com en el fichero .env y arranca con:
+#   docker compose --profile publico up -d
+
+{$DOMINIO} {
+	encode gzip
+
+	# Cabeceras de seguridad basicas.
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	reverse_proxy radar:3000
+}

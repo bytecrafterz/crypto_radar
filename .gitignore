@@ -1,0 +1,50 @@
+# ==========================================================
+#  Lo que NUNCA debe salir de esta maquina
+# ==========================================================
+
+# Claves, contrasenas y webhooks. Lo mas importante de este fichero.
+# .env.example SI se sube: es la plantilla, sin valores reales.
+.env
+.env.*
+!.env.example
+
+# Copias de la base de datos: son enormes y contienen datos reales.
+respaldos/
+*.dump
+*.sql.gz
+
+# Certificados y claves privadas
+nginx/ssl/
+*.pem
+*.key
+*.pfx
+*.crt
+
+# ==========================================================
+#  Generado, no hace falta versionarlo
+# ==========================================================
+
+node_modules/
+dist/
+logs/
+*.log
+
+# Paquete de entrega, se regenera cuando haga falta
+entrega/
+
+# Capturas y temporales del sistema
+*.tmp
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Ficheros de trabajo del editor
+.vscode/
+.idea/
+
+# ==========================================================
+#  Documentos internos que no son del cliente
+# ==========================================================
+
+# Borradores de mensajes: notas de trabajo, no codigo entregable
+docs/cliente/

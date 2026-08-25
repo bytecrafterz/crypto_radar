@@ -1,0 +1,459 @@
+========================================================================
+  PLAN DE DESARROLLO
+  Proyecto 2: Robots 2 + 3 (radar de informacion sobre tokens)
+  Proyecto 1: Sistema de trading BTC / ETH / SOL
+========================================================================
+
+Documento tecnico de trabajo. Infraestructura (nginx, servidor, dominio)
+ya resuelta, no se trata aqui.
+
+
+========================================================================
+  RESUMEN: POR DONDE EMPEZAR
+========================================================================
+
+Empezar por el PROYECTO 2.
+
+Motivo: reutiliza la pila que ya existe (Node 24, TypeScript ESM,
+PostgreSQL 16, Fastify) y la misma base de datos. El Robot 3 es en su
+mayor parte pegamento entre piezas que ya funcionan. El Robot 2 es el
+unico trabajo de verdad.
+
+Ademas, el paso 1 del Proyecto 2 (ingesta de Telegram) es exactamente el
+mismo componente que necesita el Robot 2 del Proyecto 1. Se construye una
+vez y sirve para los dos.
+
+ORDEN DE TRABAJO RECOMENDADO
+
+  1. Ingesta de Telegram + almacenamiento en bruto   (sirve a los dos)
+  2. Triaje y extraccion                             (Proyecto 2)
+  3. Analisis temporal (anticipacion)                (Proyecto 2)
+  4. Endpoint /api/candidato + Robot 3               (Proyecto 2)
+  5. Fase de medicion en silencio, 4-6 semanas       (Proyecto 2)
+  6. Descarga historica de mercado                   (Proyecto 1)
+
+
+========================================================================
+  PROYECTO 2 - ROBOTS 2 + 3
+========================================================================
+
+------------------------------------------------------------------------
+PASO 1. INGESTA DE TELEGRAM
+------------------------------------------------------------------------
+
+LIBRERIA: GramJS, no Telethon.
+
+  npm i telegram
+
+Telethon es Python y partiria el codigo en dos lenguajes. GramJS es
+TypeScript y puede compartir directamente db.ts, logger.ts, http.ts y el
+sistema de migraciones que ya existen.
+
+ACCESO
+
+  1. Entrar en my.telegram.org -> API development tools
+  2. Obtener api_id y api_hash (gratis)
+  3. La primera ejecucion pide login interactivo y devuelve una
+     "session string"
+  4. Guardar esa cadena en .env; a partir de ahi no vuelve a pedir nada
+
+LO UNICO QUE NO SE PUEDE AUTOMATIZAR
+
+El primer login necesita un numero de telefono que reciba SMS. Es el
+mismo obstaculo que hizo descartar Telegram para las alertas del Robot 1.
+Hay que decidir de quien es esa cuenta ANTES de escribir codigo.
+
+Usar SIEMPRE una cuenta dedicada, nunca una personal: leer canales con
+una cuenta de usuario conlleva riesgo de bloqueo.
+
+PATRON DE LECTURA
+
+  client.addEventHandler(handler, new NewMessage({}));
+
+Solo leer. No enviar, no reaccionar, no unirse a mas de unos pocos
+canales por dia. Los bloqueos vienen de comportarse como un bot, no de
+leer.
+
+
+------------------------------------------------------------------------
+PASO 2. GUARDAR EN BRUTO ANTES DE FILTRAR
+------------------------------------------------------------------------
+
+Es la decision de arquitectura mas importante del proyecto.
+
+  -- db/migrations/006_telegram.sql
+
+  CREATE TABLE tg_channels (
+    id            BIGSERIAL PRIMARY KEY,
+    tg_id         BIGINT UNIQUE NOT NULL,
+    username      TEXT,
+    title         TEXT,
+    lang          TEXT,
+    added_at      TIMESTAMPTZ DEFAULT now(),
+    active        BOOLEAN DEFAULT true
+  );
+
+  CREATE TABLE tg_messages (
+    id            BIGSERIAL PRIMARY KEY,
+    channel_id    BIGINT REFERENCES tg_channels(id),
+    tg_msg_id     BIGINT,
+    posted_at     TIMESTAMPTZ NOT NULL,   -- hora del mensaje, NO de ingesta
+    received_at   TIMESTAMPTZ DEFAULT now(),
+    text          TEXT,
+    text_hash     TEXT,                   -- para detectar copias
+    edited_at     TIMESTAMPTZ,
+    deleted       BOOLEAN DEFAULT false,
+    triage        TEXT,                   -- null | descartado | candidato
+    UNIQUE (channel_id, tg_msg_id)
+  );
+
+  CREATE INDEX idx_tg_msg_posted ON tg_messages(posted_at DESC);
+  CREATE INDEX idx_tg_msg_hash   ON tg_messages(text_hash);
+
+POR QUE IMPORTA
+
+Cuando el clasificador resulte estar mal (y va a pasar), se vuelve a
+pasar sobre el historico guardado en vez de haber tirado la evidencia.
+Sin esto, cada mejora obliga a empezar el reloj de cero.
+
+Tratar edited_at y deleted desde el primer dia: Telegram permite editar
+un mensaje despues de publicarlo, y hay que saber que el texto cambio.
+
+
+------------------------------------------------------------------------
+PASO 3. TRIAJE EN DOS ETAPAS
+------------------------------------------------------------------------
+
+Nunca mandar 10.000 mensajes al dia a un modelo de lenguaje.
+
+ETAPA A - gratis, codigo puro
+
+Descartar lo que no tiene ninguna posibilidad:
+
+  const SOLANA = /\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/;
+  const EVM    = /\b0x[a-fA-F0-9]{40}\b/;
+  const TICKER = /\$[A-Za-z]{2,10}\b/;
+
+Mas una lista de descarte: "100x", "MOON", "BUY NOW" sin direccion y sin
+ninguna afirmacion comprobable. Esto elimina el 80-90% a coste cero.
+
+ETAPA B - modelo de lenguaje sobre lo que sobrevive
+
+Pedir JSON estructurado:
+
+  {
+    "es_relevante": true,
+    "tipo": "listing|lanzamiento|partnership|whale|negativo|hype|spam",
+    "token": "...", "contrato": "...", "cadena": "solana|base|otra",
+    "afirmacion_verificable": "...",
+    "confianza": 0-100
+  }
+
+Forzar salida JSON y validarla. Lo que no valide se descarta, no se
+adivina.
+
+
+------------------------------------------------------------------------
+PASO 4. RESOLVER EL TOKEN A UNA DIRECCION
+------------------------------------------------------------------------
+
+La mitad de los mensajes nombran un ticker, no una direccion. Reutilizar
+la busqueda de DexScreener que ya esta integrada en
+src/sources/dexscreener.ts.
+
+REGLA CRITICA
+
+Muchos tokens comparten ticker. Si un ticker resuelve a mas de un
+candidato y el mensaje no da direccion: marcar como NO RESUELTO y
+descartar.
+
+Nunca adivinar de que token se hablaba. Una resolucion equivocada
+envenena todo lo que viene despues.
+
+
+------------------------------------------------------------------------
+PASO 5. ANALISIS DE FUENTES (la inteligencia de verdad)
+------------------------------------------------------------------------
+
+  CREATE TABLE tg_mentions (
+    id           BIGSERIAL PRIMARY KEY,
+    message_id   BIGINT REFERENCES tg_messages(id),
+    channel_id   BIGINT REFERENCES tg_channels(id),
+    chain        TEXT, address TEXT,
+    tipo_senal   TEXT,
+    posted_at    TIMESTAMPTZ NOT NULL,
+    es_primera   BOOLEAN            -- primera mencion de este token
+  );
+
+  CREATE TABLE tg_source_stats (
+    channel_id       BIGINT PRIMARY KEY REFERENCES tg_channels(id),
+    tokens_citados   INT DEFAULT 0,
+    veces_primero    INT DEFAULT 0,
+    anticipacion_med INTERVAL,      -- cuanto se adelanta al movimiento
+    tasa_utiles      NUMERIC(5,2),
+    actualizado      TIMESTAMPTZ
+  );
+
+INDEPENDENCIA DE FUENTES
+
+Guardar un text_hash normalizado (minusculas, sin emoji, sin enlaces, sin
+espacios de mas) y ademas huellas por fragmentos.
+
+Dos canales que publican texto casi identico con minutos de diferencia
+cuentan como UNA fuente, no como dos. Sin esto, "3 fuentes
+independientes" no significa nada: en cripto los canales se copian entre
+si constantemente y las campanas pagadas golpean varios a la vez para
+parecer organicas.
+
+ANALISIS TEMPORAL - construir esto primero
+
+Es la parte de mas valor de todo el proyecto y la que menos
+infraestructura nueva necesita, porque el lado del precio ya se esta
+guardando en token_snapshots.
+
+Para cada token:
+
+  anticipacion = primer_movimiento_de_precio - primera_mencion
+
+  Positivo -> Telegram hablo antes  (senal potencialmente util)
+  Negativo -> Telegram reacciono    (Telegram sigue al mercado)
+
+Guardarlo por mencion Y agregado por canal. Un canal que va siempre
+adelantado vale mucho mas que uno que menciona cientos de tokens.
+
+REPUTACION
+
+Siempre derivada, nunca escrita a mano. Recalcular tg_source_stats de
+forma periodica a partir de resultados reales. Eso cumple el requisito
+de que la reputacion sea dinamica.
+
+
+------------------------------------------------------------------------
+PASO 6. ROBOT 3 Y LA INTEGRACION
+------------------------------------------------------------------------
+
+El Robot 1 solo necesita UN endpoint nuevo. Todo lo demas ya existe.
+
+  // src/web/server.ts
+  app.post('/api/candidato', async (req, reply) => {
+    const { chain, address, origen } = req.body;
+    const token = await repo.upsertToken({
+      chain, tokenAddress: address, source: 'telegram'
+    });
+    const analysis = await enrichToken(token);   // ya existe
+    return {
+      opportunity: analysis?.score?.opportunity,
+      risk:        analysis?.score?.risk,
+      vetoed:      analysis?.score?.vetoed,
+      motivos:     analysis?.score?.reasons
+    };
+  });
+
+Protegerlo con una cabecera de secreto compartido: es una ruta de
+escritura.
+
+PUNTUACION DE CONVERGENCIA
+
+Mantener las componentes SEPARADAS, como pide la especificacion:
+
+  interface Convergencia {
+    tecnica: number;      // del Robot 1
+    social: number;       // fuerza de la senal
+    fuentes: number;      // reputacion
+    anticipacion: number; // llego antes del movimiento?
+    evidencia: number;    // se pudo verificar?
+    riesgo: number;       // del Robot 1
+  }
+
+Nunca fundirlas en un solo numero internamente. El nivel sale de reglas:
+
+  ROJO     -> tecnica alta Y riesgo bajo Y sin vetos
+              Y fuentes independientes >= 2 Y anticipacion > 0
+  NARANJA  -> tecnica buena pero alguna componente floja
+  AMARILLO -> Telegram encontro algo, Robot 1 no confirma
+
+REGLA INVIOLABLE
+
+Los vetos del Robot 1 siempre ganan. Ninguna cantidad de ruido en
+Telegram anula un honeypot. Hay que cablearlo para que sea
+estructuralmente imposible, no una simple politica.
+
+
+------------------------------------------------------------------------
+PASO 7. MEDIR ANTES DE ALERTAR
+------------------------------------------------------------------------
+
+Ejecutar la Fase 1 con las alertas APAGADAS durante 4-6 semanas.
+
+La tabla token_horizons ya registra resultados a 5 min, 15 min, 1 h, 6 h,
+24 h y 7 dias, asi que la comparacion es una consulta, no infraestructura
+nueva:
+
+  Grupo A: confirmados por Robot 1 Y senalados por Telegram
+  Grupo B: confirmados por Robot 1 solamente
+
+Si A no gana claramente a B, la capa de Telegram no aporta valor y se ha
+descubierto barato.
+
+Esta es la parte que ningun otro desarrollador puede ofrecer, porque
+necesita los datos de resultado que el Robot 1 ya lleva meses guardando.
+
+
+========================================================================
+  PROYECTO 1 - TRADING BTC / ETH / SOL
+========================================================================
+
+Codigo completamente separado. No compartir repositorio con el radar de
+tokens: otros datos, otro ciclo de vida, otro nivel de riesgo.
+
+
+------------------------------------------------------------------------
+PASO 1. DATOS DE MERCADO
+------------------------------------------------------------------------
+
+  npm i ccxt
+
+CCXT da una interfaz unica sobre Binance, Bybit, OKX y demas, asi que
+cambiar de exchange mas adelante no obliga a reescribir nada.
+
+  - REST para descargar historico OHLCV (anos de 1m/5m/15m/1h/4h)
+  - WebSocket para velas en vivo
+  - Guardar en PostgreSQL, particionado por simbolo y temporalidad
+
+Hacer la descarga historica ANTES que nada. Todo lo demas depende de
+tener historico.
+
+
+------------------------------------------------------------------------
+PASO 2. MOTOR DE INDICADORES
+------------------------------------------------------------------------
+
+Calcular siempre desde las velas guardadas, nunca solo desde el estado en
+vivo: un reinicio perderia los indicadores.
+
+Lista depurada, quitando lo que mide lo mismo:
+
+  Tendencia    EMA 20 / 50 / 200
+  Momentum     RSI 14  O  MACD, no los dos por defecto: se solapan
+               mucho. La especificacion pide justificar la redundancia,
+               asi que elegir uno y explicar por que.
+  Volatilidad  ATR 14 -> distancia del stop y tamano de posicion
+  Estructura   maximos y minimos por fractales -> tendencia, soportes,
+               resistencias, rupturas
+  Volumen      relativo a su propia media
+  VWAP         referencia intradia
+  Open Interest / Funding
+               desde los endpoints de futuros del exchange. No son
+               redundantes: miden posicionamiento, no precio.
+
+
+------------------------------------------------------------------------
+PASO 3. MOTOR DE BACKTESTING, ANTES DE NINGUNA ESTRATEGIA
+------------------------------------------------------------------------
+
+Construirlo en TERCER lugar, no al final. Una estrategia escrita sin
+backtester es una estrategia escrita a ciegas.
+
+Requisitos:
+  - simulacion vela a vela sin mirar al futuro
+  - spread y comisiones descontados
+  - slippage modelado
+  - divisiones walk-forward
+  - resultados desglosados por regimen y por sesion
+
+EL FALLO MAS COMUN
+
+Usar el cierre de una vela para decidir una entrada dentro de esa misma
+vela. Hay que protegerse de eso explicitamente.
+
+
+------------------------------------------------------------------------
+PASO 4. LOS ROBOTS, EN ORDEN
+------------------------------------------------------------------------
+
+  1. Robot 1  - senal + puntuacion de calidad, sin ejecutar nada
+  2. Robot 2  - seguimiento de traders en Telegram (mismo trabajo de
+                GramJS del Proyecto 2, reutilizable)
+  3. Robot 3  - convergencia + revalidacion EN EL MOMENTO de ejecutar,
+                no repeticion de una decision anterior
+  4. Risk Manager - la especificacion recibida es buena; implementar los
+                cuatro estados tal cual: EXECUTE_NORMAL, EXECUTE_REDUCED,
+                WAIT_RECHECK, BLOCK
+
+SOBRE EL ROBOT 2 AQUI
+
+Extraer entrada / stop / TP de texto libre es donde se pierde dinero.
+
+REGLA: si falta o es ambiguo el activo, la direccion, la entrada o el
+stop, se descarta la senal. Nunca deducir un stop.
+
+
+------------------------------------------------------------------------
+PASO 5. EJECUCION, LA ULTIMA Y CON CANDADO
+------------------------------------------------------------------------
+
+  backtest -> paper trading en vivo -> dinero real pequeno -> escalar
+
+El modo paper tiene que usar EL MISMO camino de codigo que la ejecucion
+real, cambiando solo la llamada final a createOrder. Si no, se esta
+probando algo distinto de lo que se va a poner en produccion.
+
+AL CONECTAR DE VERDAD
+
+  - claves de API con permiso de trading UNICAMENTE, nunca de retirada
+  - lista blanca de IP en el exchange
+  - claves de idempotencia para que un reintento no abra dos posiciones
+  - stop loss enviado EN LA MISMA llamada que la entrada, nunca "lo
+    ponemos despues"
+  - reconciliar posiciones abiertas contra el exchange en cada arranque:
+    tras una caida, la base de datos y la realidad no coinciden
+
+
+========================================================================
+  AVISOS QUE CONVIENE TENER PRESENTES
+========================================================================
+
+1. CUENTA DE TELEGRAM
+   Necesita telefono con SMS y tiene riesgo de bloqueo. Cuenta dedicada,
+   nunca personal. Decidirlo antes de escribir codigo.
+
+2. COSTE MENSUAL
+   El clasificador con modelo de lenguaje es el primer componente con
+   factura recurrente. Todo lo demas del Robot 1 va en planes gratuitos.
+   Conviene que la clienta lo sepa y lo acepte antes de construirlo.
+
+3. INDEPENDENCIA DE FUENTES
+   Es un problema de investigacion, no de programacion. No prometer que
+   se resuelve del todo. Se puede detectar copia literal y publicacion
+   casi simultanea; no se puede detectar con fiabilidad una campana
+   pagada bien hecha.
+
+4. REPUTACION DESDE CERO
+   Necesita meses de datos antes de significar algo. El sistema arranca
+   sin criterio y lo va ganando.
+
+5. RIESGO CONCEPTUAL
+   La fuerza probada del Robot 1 es DESCARTAR. Anadir "se esta hablando
+   mucho de esto" empuja hacia tokens promocionados, que es justo donde
+   vive la manipulacion. La convergencia protege en parte, porque el
+   Robot 1 sigue teniendo que confirmar y los vetos siguen mandando, pero
+   conviene decirlo en voz alta.
+
+6. MERCADOS EFICIENTES (Proyecto 1)
+   BTC, ETH y SOL son los activos mas operados algoritmicamente de
+   cripto. Encontrar ventaja ahi con EMA y RSI en velas de 4 h, contra
+   firmas con servidores colocados, es muy dificil. Ademas, cuando un
+   trader publica una senal, se parsea y el Robot 3 la valida, el precio
+   ya se ha movido. La propia especificacion lo intuye al pedir
+   comprobar "se a operacao do trader nao esta atrasada".
+
+
+========================================================================
+  PRIMER ENTREGABLE SUGERIDO
+========================================================================
+
+Migracion 006_telegram.sql + colector de GramJS funcionando y guardando
+mensajes en bruto.
+
+Es la base de los dos proyectos y deja algo medible funcionando desde el
+primer dia.
