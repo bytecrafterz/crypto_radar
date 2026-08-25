@@ -220,6 +220,7 @@ const NAV = [
   { href: '/tokens', label: 'Tokens', key: 'tokens' },
   { href: '/alertas', label: 'Alertas', key: 'alertas' },
   { href: '/resultados', label: 'Resultados', key: 'resultados' },
+  { href: '/telegram', label: 'Telegram', key: 'telegram' },
   { href: '/sistema', label: 'Sistema', key: 'sistema' },
 ];
 

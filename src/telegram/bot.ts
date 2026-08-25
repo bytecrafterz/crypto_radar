@@ -42,9 +42,20 @@ interface RespuestaUpdates {
   description?: string;
 }
 
+/**
+ * Token del bot del Robot 2.
+ *
+ * VARIABLE PROPIA, A PROPOSITO
+ * El sistema ya tenia un bot de Telegram para ENVIAR alertas, que lee
+ * TELEGRAM_BOT_TOKEN. Si el colector usara la misma variable, los dos
+ * estarian pidiendo getUpdates con el mismo token, y Telegram entrega
+ * cada mensaje UNA sola vez: el que llegara antes se quedaria con el y
+ * el otro no veria nada. El fallo no da error, simplemente se pierden
+ * mensajes en silencio.
+ */
 function token(): string {
-  const t = process.env.TELEGRAM_BOT_TOKEN ?? '';
-  if (!t) throw new Error('Falta TELEGRAM_BOT_TOKEN en .env');
+  const t = process.env.TELEGRAM_RADAR_TOKEN ?? '';
+  if (!t) throw new Error('Falta TELEGRAM_RADAR_TOKEN en .env');
   return t;
 }
 
@@ -117,7 +128,18 @@ export async function recogerMensajes(limite = 100): Promise<MensajeTelegram[]> 
   // Se confirma el offset SOLO despues de haber extraido todo. Si algo
   // falla antes, en la vuelta siguiente vuelven a llegar los mismos
   // mensajes en vez de perderse.
-  if (ultimoUpdate > offset) {
+  //
+  // OJO CON EL FUERA DE UNO
+  // El parametro offset de Telegram significa "dame las actualizaciones
+  // con id MAYOR O IGUAL que esto". Por eso hay que guardar siempre
+  // ultimoUpdate + 1: guardar ultimoUpdate a secas hace que la siguiente
+  // llamada devuelva otra vez el mismo mensaje.
+  //
+  // Antes la condicion era "ultimoUpdate > offset", y fallaba justo
+  // cuando el id del mensaje coincidia con el offset guardado: no
+  // avanzaba nunca y el colector reprocesaba el mismo mensaje cada 30
+  // segundos. No daba error, solo trabajaba en balde.
+  if (res.result.length > 0) {
     await setState(CLAVE_OFFSET, ultimoUpdate + 1);
   }
 

@@ -13,6 +13,9 @@ import { runDiscovery } from './discovery.js';
 import { runEnrichment } from './enrichment.js';
 import { runMonitor } from './monitor.js';
 import { startTelegram, stopTelegram } from './telegram.js';
+import { runColector } from '../telegram/colector.js';
+import { comprobar as comprobarBot } from '../telegram/bot.js';
+import { actualizarPendientes, recalcularReputacion } from '../telegram/anticipacion.js';
 import { notify, activeChannels } from './notify.js';
 
 const log = child('motor');
@@ -81,6 +84,30 @@ export async function startWorker(): Promise<void> {
   loop('analisis', () => 60_000, runEnrichment);
   loop('seguimiento', () => getFilters().monitoring.interval_minutes * 60_000, runMonitor);
   loop('consumo', () => 300_000, persistUsage);
+
+  // --- Robot 2: radar de informacion en Telegram -------------------------
+  // Solo arranca si hay token configurado. Sin el, el resto del sistema
+  // funciona exactamente igual que antes.
+  if (process.env.TELEGRAM_RADAR_TOKEN) {
+    const bot = await comprobarBot();
+    if (bot.ok) {
+      log.info({ bot: '@' + bot.usuario }, 'Robot 2 activo');
+
+      // Cada 30 s: leer mensajes nuevos y pasarlos por la cadena.
+      loop('robot2-colector', () => 30_000, runColector);
+
+      // Cada 30 min: calcular si las menciones se adelantaron al
+      // movimiento. No puede hacerse al recibir el mensaje porque en ese
+      // momento todavia no ha pasado nada que medir.
+      loop('robot2-anticipacion', () => 30 * 60_000, () => actualizarPendientes());
+
+      // Cada 6 h: rehacer la reputacion de cada canal con los resultados
+      // reales acumulados.
+      loop('robot2-reputacion', () => 6 * 60 * 60_000, recalcularReputacion);
+    } else {
+      log.warn({ error: bot.error }, 'token de Telegram configurado pero el bot no responde');
+    }
+  }
 
   log.info(
     {
