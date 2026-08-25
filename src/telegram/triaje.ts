@@ -63,6 +63,66 @@ export type ResultadoTriaje =
   | { pasa: true; motivo: string; direccion?: string; cadena?: string; ticker?: string }
   | { pasa: false; motivo: string };
 
+/** Un token mencionado dentro de un mensaje. */
+export interface Candidato {
+  direccion?: string;
+  cadena?: string;
+  ticker?: string;
+  /** De donde salio, para poder explicarlo despues. */
+  origen: 'direccion' | 'ticker';
+}
+
+/**
+ * Saca TODOS los tokens mencionados en un mensaje, no solo el primero.
+ *
+ * POR QUE HACE FALTA
+ * Un solo mensaje puede nombrar varios tokens: los canales publican
+ * listas del tipo "top 5 de hoy" continuamente. Quedarse con la primera
+ * coincidencia significa tirar el resto sin mirarlo, y no se nota, porque
+ * el mensaje si aparece como procesado.
+ *
+ * Se descubrio con un mensaje real de prueba: llevaba un $WIF en la
+ * primera linea y una direccion EVM en la tercera. El sistema se quedaba
+ * con la direccion, no la podia resolver, y el $WIF se perdia.
+ */
+export function extraerCandidatos(texto: string): Candidato[] {
+  const encontrados: Candidato[] = [];
+  const vistos = new Set<string>();
+
+  // Las direcciones son la senal fiable: van primero.
+  for (const m of texto.matchAll(new RegExp(RE_EVM.source, 'g'))) {
+    const d = m[0];
+    if (vistos.has(d.toLowerCase())) continue;
+    vistos.add(d.toLowerCase());
+    encontrados.push({ direccion: d, cadena: 'base', origen: 'direccion' });
+  }
+
+  for (const m of texto.matchAll(new RegExp(RE_SOLANA.source, 'g'))) {
+    const d = m[0];
+    // Mismo filtro de falsos positivos que en el triaje: base58 largo
+    // tambien casa con hashes de transaccion.
+    if (d.length < 40 && !/pump$|bonk$/i.test(d)) continue;
+    if (vistos.has(d)) continue;
+    vistos.add(d);
+    encontrados.push({ direccion: d, cadena: 'solana', origen: 'direccion' });
+  }
+
+  // Los tickers solo si el mensaje ademas dice algo informativo: un
+  // ticker suelto entre hype no es una mencion util.
+  const bajo = texto.toLowerCase();
+  const informativa = PALABRAS_INFORMATIVAS.some((p) => bajo.includes(p));
+  if (informativa) {
+    for (const m of texto.matchAll(new RegExp(RE_TICKER.source, 'g'))) {
+      const t = m[0].slice(1);
+      if (vistos.has(t.toUpperCase())) continue;
+      vistos.add(t.toUpperCase());
+      encontrados.push({ ticker: t, origen: 'ticker' });
+    }
+  }
+
+  return encontrados;
+}
+
 /**
  * Texto normalizado para comparar mensajes entre canales.
  *
