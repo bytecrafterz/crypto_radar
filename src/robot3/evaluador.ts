@@ -136,7 +136,7 @@ async function avisosHoy(): Promise<number> {
 }
 
 /** Construye el aviso, en espanol, sea cual sea el idioma original. */
-function construirAviso(
+export function construirAviso(
   d: DatosMencion,
   r1: EntradaRobot1,
   r2: EntradaRobot2,
