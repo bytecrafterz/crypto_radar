@@ -41,7 +41,7 @@ function dexLink(chain: string, pairAddress: string): string {
  * la URL, el enlace abre el token correcto y solo ese: no hay nada que
  * buscar y por tanto nada que confundir.
  */
-function swapLink(
+export function swapLink(
   chain: string,
   tokenAddress: string,
   dex: string | null,

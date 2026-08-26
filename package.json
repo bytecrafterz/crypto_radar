@@ -17,7 +17,8 @@
     "web": "tsx src/web/server.ts",
     "selftest": "tsx src/selftest.ts",
     "test:alertas": "tsx src/testAlert.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test \"src/pruebas/**/*.test.ts\""
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

@@ -137,8 +137,8 @@ export async function renderRobot3(): Promise<string> {
         </div>
         <div>
           <div class="dim small" style="margin-bottom:5px">Lo que dice la calle (Robot 2)</div>
-          ${barra('Senal social', f.score_social)}
-          ${barra('Independencia', f.score_fuentes)}
+          ${barra('Senal social (incluye independencia)', f.score_social)}
+          ${barra('Reputacion de las fuentes', f.score_fuentes)}
           ${barra('Evidencia', f.score_evidencia)}
         </div>
       </div>

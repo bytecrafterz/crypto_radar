@@ -57,7 +57,7 @@ const RE_ENLACE = /(?:https?:\/\/)?t\.me\/(?:joinchat\/)?([A-Za-z][A-Za-z0-9_]{3
  * verdad se mide despues, viendo si llega antes o despues del movimiento
  * del precio.
  */
-function puntuar(titulo: string, miembros: number | null): { score: number; motivo: string } {
+export function puntuar(titulo: string, miembros: number | null): { score: number; motivo: string } {
   let score = 50;
   const motivos: string[] = [];
   const t = titulo.toLowerCase();
