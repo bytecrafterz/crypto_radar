@@ -221,6 +221,7 @@ const NAV = [
   { href: '/alertas', label: 'Alertas', key: 'alertas' },
   { href: '/resultados', label: 'Resultados', key: 'resultados' },
   { href: '/telegram', label: 'Telegram', key: 'telegram' },
+  { href: '/convergencia', label: 'Convergencia', key: 'convergencia' },
   { href: '/sistema', label: 'Sistema', key: 'sistema' },
 ];
 

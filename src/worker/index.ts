@@ -18,6 +18,7 @@ import { comprobar as comprobarBot } from '../telegram/bot.js';
 import { actualizarPendientes, recalcularReputacion } from '../telegram/anticipacion.js';
 import { runDescubrimiento } from '../telegram/descubrimiento.js';
 import { runColectorMt, sincronizarCanales } from '../telegram/colector-mt.js';
+import { runRobot3 } from '../robot3/evaluador.js';
 import { estaConfigurado as mtprotoListo } from '../telegram/mtproto.js';
 import { notify, activeChannels } from './notify.js';
 
@@ -134,6 +135,16 @@ export async function startWorker(): Promise<void> {
       log.warn({ error: bot.error }, 'token de Telegram configurado pero el bot no responde');
     }
   }
+
+  // --- Robot 3: convergencia entre los dos radares -----------------------
+  // Cruza lo que dice la calle (Robot 2) con lo que dicen los datos de la
+  // cadena (Robot 1). No suma las dos cosas en una nota unica: un token
+  // con mucho ruido social y un contrato peligroso no es "medio bueno",
+  // es descartado, y por eso los vetos mandan sobre todo lo demas.
+  //
+  // Cada 5 minutos, no cada 30 segundos: juzgar un token que el Robot 1
+  // todavia no ha terminado de analizar solo produce veredictos en falso.
+  loop('robot3-convergencia', () => 5 * 60_000, runRobot3);
 
   log.info(
     {

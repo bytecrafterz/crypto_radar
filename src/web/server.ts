@@ -15,6 +15,7 @@ import { child } from '../core/logger.js';
 import * as repo from '../core/repo.js';
 import * as dexscreener from '../sources/dexscreener.js';
 import { renderTelegram } from './telegram-page.js';
+import { renderRobot3 } from './robot3-page.js';
 import { enrichToken } from '../worker/enrichment.js';
 import { getUsage } from '../core/http.js';
 import {
@@ -176,6 +177,7 @@ export async function buildServer() {
   app.get('/resultados', async (_req, reply) => html(reply, await renderResults()));
   app.get('/sistema', async (_req, reply) => html(reply, await renderSystem()));
   app.get('/telegram', async (_req, reply) => html(reply, await renderTelegram()));
+  app.get('/convergencia', async (_req, reply) => html(reply, await renderRobot3()));
 
   /**
    * Pausar o reanudar los avisos desde el panel.
