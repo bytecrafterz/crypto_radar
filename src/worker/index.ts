@@ -17,6 +17,7 @@ import { runColector } from '../telegram/colector.js';
 import { comprobar as comprobarBot } from '../telegram/bot.js';
 import { actualizarPendientes, recalcularReputacion } from '../telegram/anticipacion.js';
 import { runDescubrimiento } from '../telegram/descubrimiento.js';
+import { runColectorMt, sincronizarCanales } from '../telegram/colector-mt.js';
 import { estaConfigurado as mtprotoListo } from '../telegram/mtproto.js';
 import { notify, activeChannels } from './notify.js';
 
@@ -117,6 +118,15 @@ export async function startWorker(): Promise<void> {
       if (mtprotoListo()) {
         log.info('descubrimiento automatico de canales activo');
         loop('robot2-descubrimiento', () => 2 * 60 * 60_000, runDescubrimiento);
+
+        // Lectura de los canales en los que la cuenta ya esta dentro.
+        // Cada canal es una llamada, asi que se leen pocos por vuelta y
+        // se empieza siempre por los que llevan mas tiempo sin mirarse.
+        loop('robot2-lectura', () => 90_000, runColectorMt);
+
+        // Cada hora se comprueba si la cuenta ha entrado en canales
+        // nuevos, para registrarlos como fuentes.
+        loop('robot2-sincronizar', () => 60 * 60_000, sincronizarCanales);
       } else {
         log.info('sin credenciales MTProto: el Robot 2 solo lee donde se le invite');
       }
