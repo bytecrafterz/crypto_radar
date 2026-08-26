@@ -16,6 +16,8 @@ import { startTelegram, stopTelegram } from './telegram.js';
 import { runColector } from '../telegram/colector.js';
 import { comprobar as comprobarBot } from '../telegram/bot.js';
 import { actualizarPendientes, recalcularReputacion } from '../telegram/anticipacion.js';
+import { runDescubrimiento } from '../telegram/descubrimiento.js';
+import { estaConfigurado as mtprotoListo } from '../telegram/mtproto.js';
 import { notify, activeChannels } from './notify.js';
 
 const log = child('motor');
@@ -104,6 +106,20 @@ export async function startWorker(): Promise<void> {
       // Cada 6 h: rehacer la reputacion de cada canal con los resultados
       // reales acumulados.
       loop('robot2-reputacion', () => 6 * 60 * 60_000, recalcularReputacion);
+
+      // --- Descubrimiento automatico de canales -------------------------
+      // Solo si hay credenciales de cuenta de usuario: un bot normal no
+      // puede buscar canales ni unirse por su cuenta.
+      //
+      // Cada 2 horas, y con un tope de 3 uniones al dia dentro del propio
+      // modulo. El ritmo importa mas que el volumen: Telegram restringe
+      // las cuentas que se unen deprisa, no las que leen mucho.
+      if (mtprotoListo()) {
+        log.info('descubrimiento automatico de canales activo');
+        loop('robot2-descubrimiento', () => 2 * 60 * 60_000, runDescubrimiento);
+      } else {
+        log.info('sin credenciales MTProto: el Robot 2 solo lee donde se le invite');
+      }
     } else {
       log.warn({ error: bot.error }, 'token de Telegram configurado pero el bot no responde');
     }

@@ -96,6 +96,21 @@ export async function renderTelegram(): Promise<string> {
       ORDER BY me.posted_at DESC LIMIT 60`,
   );
 
+  const descubiertos = await query<{
+    username: string; title: string; miembros: number | null;
+    score: number; estado: string; descubierto_por: string; motivo_score: string;
+  }>(
+    `SELECT username, title, miembros, score, estado, descubierto_por, motivo_score
+       FROM tg_canales_descubiertos
+      ORDER BY CASE estado WHEN 'unido' THEN 0 WHEN 'candidato' THEN 1 ELSE 2 END,
+               score DESC, miembros DESC NULLS LAST
+      LIMIT 30`,
+  );
+
+  const porEstado = await query<{ estado: string; n: number }>(
+    'SELECT estado, COUNT(*)::int AS n FROM tg_canales_descubiertos GROUP BY estado',
+  );
+
   const mensajes = await query<FilaMensaje>(
     `SELECT m.posted_at, c.title AS canal, m.text, m.triage, m.triage_motivo
        FROM tg_messages m JOIN tg_channels c ON c.id = m.channel_id
@@ -173,6 +188,52 @@ export async function renderTelegram(): Promise<string> {
        ${stat('Mensajes', resumen.mensajes.toLocaleString('es-ES'), 'guardados en bruto')}
        ${stat('Descartados', `${pctDescarte}%`, 'ruido filtrado')}
        ${stat('Tokens', resumen.tokens, 'identificados')}
+     </div>
+
+     <h2>Canales encontrados solo</h2>
+     <p class="sub small">
+       El sistema busca sus propias fuentes: por palabras clave en tres idiomas,
+       por los enlaces que los canales se pasan entre ellos y siguiendo los
+       reenvios. Encuentra muchos mas de los que conviene seguir, asi que los
+       apunta y solo entra en los mejores, como maximo tres al dia.
+     </p>
+     <div class="grid stats" style="margin-bottom:14px">
+       ${['unido', 'candidato', 'rechazado', 'abandonado']
+         .map((e) => {
+           const f = porEstado.find((x) => x.estado === e);
+           const etq = { unido: 'Dentro', candidato: 'Localizados', rechazado: 'Descartados', abandonado: 'Abandonados' }[e];
+           return `<div class="card stat"><div class="label">${etq}</div>
+                   <div class="value">${f?.n ?? 0}</div></div>`;
+         })
+         .join('')}
+     </div>
+     <div class="table-wrap">
+       <table>
+         <thead><tr>
+           <th>Canal</th><th class="num">Miembros</th><th class="num">Nota</th>
+           <th>Como se encontro</th><th>Estado</th>
+         </tr></thead>
+         <tbody>${
+           descubiertos.length === 0
+             ? '<tr><td colspan="5" class="empty">Todavia no ha encontrado ninguno.</td></tr>'
+             : descubiertos
+                 .map((d) => {
+                   const color = d.estado === 'unido' ? 'green'
+                     : d.estado === 'candidato' ? 'blue'
+                     : d.estado === 'abandonado' ? 'yellow' : 'gray';
+                   return `<tr>
+                     <td><b>@${escapeHtml(d.username ?? '')}</b>
+                         <div class="dim small">${escapeHtml((d.title ?? '').slice(0, 34))}</div></td>
+                     <td class="num">${d.miembros ? d.miembros.toLocaleString('es-ES') : '<span class="dim">?</span>'}</td>
+                     <td class="num">${d.score}</td>
+                     <td class="small">${escapeHtml(d.descubierto_por)}
+                         <div class="dim small">${escapeHtml((d.motivo_score ?? '').slice(0, 40))}</div></td>
+                     <td><span class="badge ${color}">${escapeHtml(d.estado)}</span></td>
+                   </tr>`;
+                 })
+                 .join('')
+         }</tbody>
+       </table>
      </div>
 
      <h2>Fuentes</h2>
