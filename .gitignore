@@ -48,3 +48,7 @@ desktop.ini
 
 # Borradores de mensajes: notas de trabajo, no codigo entregable
 docs/cliente/
+
+# Mensajes y entregas para el cliente: no van al repositorio publico.
+entregas/
+entrega/
