@@ -115,11 +115,28 @@ export async function mirarCanal(username: string): Promise<CanalEncontrado | nu
     const ent = await cli.getEntity(username);
     if (ent.className !== 'Channel') return null;
     const c = ent as Api.Channel;
+
+    // getEntity NO trae el numero de miembros: ese dato solo viene en la
+    // informacion completa del canal. Sin el, un canal se quedaba sin
+    // tamano conocido y la nota lo penalizaba por un dato que si se podia
+    // consultar. Es una llamada mas, y por eso quien llama aqui lo hace
+    // de pocos en pocos.
+    let miembros = c.participantsCount ?? null;
+    if (miembros === null) {
+      try {
+        const full = await cli.invoke(new Api.channels.GetFullChannel({ channel: c }));
+        const fc = full.fullChat as Api.ChannelFull;
+        miembros = fc.participantsCount ?? null;
+      } catch {
+        // Hay canales que no dejan ver el recuento. No es un fallo.
+      }
+    }
+
     return {
       username: c.username ?? null,
       tgId: String(c.id),
       title: c.title ?? '',
-      miembros: c.participantsCount ?? null,
+      miembros,
     };
   } catch {
     // Canal inexistente, privado o el nombre ha cambiado. No es un error
@@ -177,6 +194,10 @@ export interface MensajeMt {
   texto: string;
   /** Canal del que se reenvio, si es un reenvio. Es la mejor pista. */
   reenviadoDe: string | null;
+  /** Usuario del canal original, cuando Telegram lo deja ver. */
+  reenviadoDeUsuario: string | null;
+  /** Nombre del canal original, para poder puntuarlo sin entrar. */
+  reenviadoDeTitulo: string | null;
 }
 
 /**
@@ -199,11 +220,27 @@ export async function leerCanal(
       .filter((m) => m.message)
       .map((m) => {
         // El reenvio dice de donde salio originalmente el contenido: es
-        // como se descubren canales que nadie ha buscado.
+        // como se descubren canales que nadie ha buscado nunca.
+        //
+        // El identificador numerico por si solo no sirve de mucho, porque
+        // para volver a pedir un canal hace falta su usuario. Pero el
+        // propio mensaje ya trae el canal de origen resuelto, asi que se
+        // coge de ahi y no cuesta ni una llamada mas.
         let reenviadoDe: string | null = null;
+        let reenviadoDeUsuario: string | null = null;
+        let reenviadoDeTitulo: string | null = null;
+
         const f = m.fwdFrom as Api.MessageFwdHeader | undefined;
         if (f?.fromId && 'channelId' in f.fromId) {
           reenviadoDe = String((f.fromId as Api.PeerChannel).channelId);
+        }
+
+        const origen = (m as { forward?: { chat?: unknown } }).forward?.chat;
+        if (origen && (origen as Api.Channel).className === 'Channel') {
+          const oc = origen as Api.Channel;
+          reenviadoDeUsuario = oc.username ?? null;
+          reenviadoDeTitulo = oc.title ?? null;
+          if (!reenviadoDe) reenviadoDe = String(oc.id);
         }
 
         return {
@@ -214,6 +251,8 @@ export async function leerCanal(
           fecha: new Date(m.date * 1000),
           texto: m.message ?? '',
           reenviadoDe,
+          reenviadoDeUsuario,
+          reenviadoDeTitulo,
         };
       });
   } catch (err) {

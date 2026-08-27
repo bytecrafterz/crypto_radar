@@ -21,6 +21,7 @@ import { child } from '../core/logger.js';
 import { leerCanal, misCanales, pausa, estaConfigurado } from './mtproto.js';
 import { triar, hashTexto, extraerCandidatos } from './triaje.js';
 import { porDireccion, porTicker } from './resolver.js';
+import { apuntarReenvio } from './descubrimiento.js';
 import type { Chain } from '../core/types.js';
 
 const log = child('colector-mt');
@@ -37,6 +38,8 @@ export interface ResumenMt {
   descartados: number;
   candidatos: number;
   resueltos: number;
+  /** Canales nuevos descubiertos por reenvio en esta vuelta. */
+  porReenvio: number;
 }
 
 /**
@@ -88,7 +91,9 @@ async function pedirVeredicto(chain: Chain, address: string): Promise<boolean> {
  * Una vuelta: lee unos cuantos canales y pasa lo nuevo por la cadena.
  */
 export async function runColectorMt(): Promise<ResumenMt> {
-  const r: ResumenMt = { canales: 0, mensajes: 0, descartados: 0, candidatos: 0, resueltos: 0 };
+  const r: ResumenMt = {
+    canales: 0, mensajes: 0, descartados: 0, candidatos: 0, resueltos: 0, porReenvio: 0,
+  };
   if (!estaConfigurado()) return r;
 
   // Se empieza por los que llevan mas tiempo sin leerse, para que ninguno
@@ -132,6 +137,17 @@ export async function runColectorMt(): Promise<ResumenMt> {
         );
         if (!guardado || guardado.ya) continue;
         r.mensajes++;
+
+        // El origen se apunta antes de juzgar el mensaje. Un reenvio
+        // puede ser ruido y venir aun asi de un canal que interesa: lo
+        // que vale aqui es de donde salio, no lo que decia.
+        if (m.reenviadoDeUsuario) {
+          const nuevo = await apuntarReenvio(
+            m.reenviadoDeUsuario,
+            m.reenviadoDeTitulo ?? m.reenviadoDeUsuario,
+          );
+          if (nuevo) r.porReenvio++;
+        }
 
         // 2. Triaje.
         const t = triar(m.texto);

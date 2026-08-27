@@ -69,3 +69,28 @@ test('el orden de los factores no cambia el resultado', () => {
     puntuar('Research VIP', 10_000).score,
   );
 });
+
+test('un canal descubierto por reenvio no se castiga por no saber su tamano', () => {
+  // Los reenvios no traen el numero de miembros. Sin compensarlo, un
+  // canal que alguien eligio relayar puntuaba por debajo del umbral para
+  // entrar, y esa via no servia de nada.
+  const porReenvio = puntuar('Watcher Guru', null, 'reenvio');
+  const porBusqueda = puntuar('Watcher Guru', null, 'busqueda');
+
+  assert.ok(porReenvio.score > porBusqueda.score,
+    'que alguien relaye un canal es una prueba de tiron, no un dato que falte');
+  assert.ok(porReenvio.score >= 55,
+    'si no llega al umbral de union, descubrirlo por reenvio no sirve para nada');
+});
+
+test('el reenvio suma, pero no salva a un canal que promete 1000x', () => {
+  const promo = puntuar('VIP PUMP SIGNALS 1000x', null, 'reenvio');
+  const limpio = puntuar('Solana Research', null, 'reenvio');
+  assert.ok(promo.score < limpio.score,
+    'la via no puede tapar lo que dice el titulo');
+});
+
+test('por defecto se puntua como busqueda, sin cambiar lo de antes', () => {
+  assert.equal(puntuar('Solana Research', 10_000).score,
+               puntuar('Solana Research', 10_000, 'busqueda').score);
+});

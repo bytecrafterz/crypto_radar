@@ -57,7 +57,11 @@ const RE_ENLACE = /(?:https?:\/\/)?t\.me\/(?:joinchat\/)?([A-Za-z][A-Za-z0-9_]{3
  * verdad se mide despues, viendo si llega antes o despues del movimiento
  * del precio.
  */
-export function puntuar(titulo: string, miembros: number | null): { score: number; motivo: string } {
+export function puntuar(
+  titulo: string,
+  miembros: number | null,
+  via: 'busqueda' | 'enlace' | 'reenvio' = 'busqueda',
+): { score: number; motivo: string } {
   let score = 50;
   const motivos: string[] = [];
   const t = titulo.toLowerCase();
@@ -94,10 +98,40 @@ export function puntuar(titulo: string, miembros: number | null): { score: numbe
     motivos.push(`el titulo dice "${bien}"`);
   }
 
+  // Un canal al que alguien reenvia ya ha demostrado tiron: alguien
+  // eligio relayar lo que publica. Eso es mejor prueba que coincidir con
+  // una palabra de busqueda, y ademas compensa que por esta via nunca
+  // llega el numero de miembros.
+  if (via === 'reenvio') {
+    score += 25;
+    motivos.push('alguien reenvio su contenido');
+  }
+
   return {
     score: Math.max(0, Math.min(100, score)),
     motivo: motivos.join('; ') || 'sin senales claras',
   };
+}
+
+/**
+ * Apunta un canal descubierto por reenvio.
+ *
+ * Es la via mas barata de las tres y la que encuentra canales que nadie
+ * localizaria buscando: cuando un canal relaya algo, el mensaje ya trae
+ * de donde salio, asi que no cuesta ninguna llamada extra a Telegram.
+ */
+export async function apuntarReenvio(
+  username: string,
+  titulo: string,
+): Promise<boolean> {
+  const ya = await queryOne<{ id: number }>(
+    'SELECT id FROM tg_canales_descubiertos WHERE username = $1',
+    [username],
+  );
+  if (ya) return false;
+  // Sin dato de miembros: verlo costaria una llamada, y aqui interesa
+  // apuntarlo y seguir leyendo. Ya se puntuara mejor cuando toque.
+  return apuntar(username, titulo, null, 'reenvio');
 }
 
 /** Apunta un canal como candidato, si no estaba ya. */
@@ -107,7 +141,7 @@ async function apuntar(
   miembros: number | null,
   via: 'busqueda' | 'enlace' | 'reenvio',
 ): Promise<boolean> {
-  const p = puntuar(titulo, miembros);
+  const p = puntuar(titulo, miembros, via);
   const fila = await queryOne<{ id: number }>(
     `INSERT INTO tg_canales_descubiertos
        (username, title, miembros, descubierto_por, score, motivo_score)
@@ -192,6 +226,52 @@ export async function extraerDeMensajes(limite = 200): Promise<number> {
 
   if (apuntados > 0) log.info({ apuntados }, 'canales apuntados desde enlaces');
   return apuntados;
+}
+
+/**
+ * Completa los canales apuntados sin numero de miembros.
+ *
+ * Los que llegan por reenvio no traen ese dato, y sin el la nota se
+ * queda coja. Mirarlos cuesta una llamada por canal, asi que se hacen
+ * unos pocos por vuelta y con pausa.
+ */
+export async function completarSinMiembros(cuantos = 3): Promise<number> {
+  const pendientes = await query<{ id: number; username: string; title: string; descubierto_por: string }>(
+    `SELECT id, username, title, descubierto_por
+       FROM tg_canales_descubiertos
+      WHERE miembros IS NULL AND estado = 'candidato' AND username IS NOT NULL
+      ORDER BY visto_at DESC
+      LIMIT $1`,
+    [cuantos],
+  );
+
+  let completados = 0;
+  for (const c of pendientes) {
+    const info = await mirarCanal(c.username);
+    if (info) {
+      const via = c.descubierto_por as 'busqueda' | 'enlace' | 'reenvio';
+      const p = puntuar(info.title || c.title, info.miembros, via);
+      await exec(
+        `UPDATE tg_canales_descubiertos
+            SET miembros = $2, score = $3, motivo_score = $4, revisado_at = now()
+          WHERE id = $1`,
+        [c.id, info.miembros, p.score, p.motivo],
+      );
+      completados++;
+    } else {
+      // El canal ya no existe o es privado: no vale la pena volver.
+      await exec(
+        `UPDATE tg_canales_descubiertos
+            SET estado = 'rechazado', motivo_estado = 'no se pudo consultar'
+          WHERE id = $1`,
+        [c.id],
+      );
+    }
+    await pausa(PAUSA_MS);
+  }
+
+  if (completados > 0) log.info({ completados }, 'canales completados con su numero de miembros');
+  return completados;
 }
 
 /** Cuantas uniones se han hecho hoy. */
@@ -308,6 +388,9 @@ export async function runDescubrimiento(): Promise<{
 }> {
   const buscados = await buscarNuevos(2);
   const enlaces = await extraerDeMensajes();
+  // Completar antes de decidir: si no, se entraria en canales mal
+  // puntuados solo porque les faltaba el dato de miembros.
+  await completarSinMiembros();
   const unidos = await unirseALosMejores();
   const abandonados = await abandonarInutiles();
 
