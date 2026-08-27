@@ -183,13 +183,20 @@ export async function actualizarPendientes(limite = 200): Promise<number> {
   let hechas = 0;
   for (const p of pendientes) {
     const a = await calcularAnticipacion(p.token_id, new Date(p.posted_at));
-    // sin_datos y sin_movimiento se guardan como 0 para no reprocesarlas
-    // eternamente; el veredicto se distingue por el signo y por el resto
-    // de columnas.
+    // Se guarda el veredicto ademas del numero.
+    //
+    // Antes "no se movio" y "no se pudo medir" acababan los dos en 0 y
+    // eran indistinguibles. Eso hundia la reputacion de los canales: al
+    // entrar en un canal se lee su historico, y esas menciones son de
+    // cuando todavia no vigilabamos el token, asi que medirlas es
+    // imposible. Contarlas como fracasos castigaba a canales que si
+    // habian acertado.
     const valor = a.segundos ?? 0;
     await queryOne(
-      'UPDATE tg_mentions SET anticipacion_seg = $2 WHERE id = $1 RETURNING id',
-      [p.id, valor],
+      `UPDATE tg_mentions
+          SET anticipacion_seg = $2, anticipacion_veredicto = $3
+        WHERE id = $1 RETURNING id`,
+      [p.id, valor, a.veredicto],
     );
     hechas++;
   }
@@ -212,9 +219,17 @@ export async function recalcularReputacion(): Promise<number> {
      SELECT m.channel_id,
             COUNT(DISTINCT m.address),
             COUNT(*) FILTER (WHERE m.es_primera),
-            AVG(m.anticipacion_seg)::int,
+            AVG(m.anticipacion_seg) FILTER (
+              WHERE m.anticipacion_veredicto <> 'sin_datos')::int,
+            -- Lo que no se pudo medir no cuenta ni a favor ni en contra.
+            -- Tenerlo en el divisor castigaba a un canal por menciones
+            -- antiguas que era imposible comprobar: un canal con un
+            -- acierto de uno figuraba con un 33% por dos menciones
+            -- heredadas de su historico.
             ROUND(100.0 * COUNT(*) FILTER (WHERE m.anticipacion_seg > 0)
-                  / NULLIF(COUNT(*) FILTER (WHERE m.anticipacion_seg IS NOT NULL), 0), 2),
+                  / NULLIF(COUNT(*) FILTER (
+                      WHERE m.anticipacion_veredicto IS NOT NULL
+                        AND m.anticipacion_veredicto <> 'sin_datos'), 0), 2),
             now()
        FROM tg_mentions m
       GROUP BY m.channel_id

@@ -27,6 +27,8 @@ interface FilaFuente {
   menciones: number;
   primeras: number;
   adelantadas: number;
+  /** Menciones que de verdad se pudieron comprobar. */
+  medibles: number;
   anticipacion_med: number | null;
 }
 
@@ -39,6 +41,7 @@ interface FilaMencion {
   resuelto_por: string;
   es_primera: boolean;
   anticipacion_seg: number | null;
+  anticipacion_veredicto: string | null;
   opportunity: number | null;
   risk: number | null;
 }
@@ -51,8 +54,12 @@ interface FilaMensaje {
   triage_motivo: string | null;
 }
 
-function minutos(seg: number | null): string {
+function minutos(seg: number | null, veredicto?: string | null): string {
   if (seg === null) return '<span class="dim">pendiente</span>';
+  // "No se pudo medir" no es lo mismo que "no se movio". Pasa con las
+  // menciones del historico: son de antes de que vigilaramos el token,
+  // asi que no habia con que compararlas.
+  if (veredicto === 'sin_datos') return '<span class="dim">no se pudo medir</span>';
   if (seg === 0) return '<span class="dim">sin movimiento</span>';
   const m = Math.round(seg / 60);
   return m > 0
@@ -77,6 +84,8 @@ export async function renderTelegram(): Promise<string> {
             COUNT(DISTINCT me.id)::int                                         AS menciones,
             COUNT(*) FILTER (WHERE me.es_primera)::int                         AS primeras,
             COUNT(*) FILTER (WHERE me.anticipacion_seg > 0)::int               AS adelantadas,
+            COUNT(*) FILTER (WHERE me.anticipacion_veredicto IS NOT NULL
+                               AND me.anticipacion_veredicto <> 'sin_datos')::int AS medibles,
             AVG(me.anticipacion_seg) FILTER (WHERE me.anticipacion_seg <> 0)::int AS anticipacion_med
        FROM tg_channels c
        LEFT JOIN tg_messages m ON m.channel_id = c.id
@@ -89,6 +98,7 @@ export async function renderTelegram(): Promise<string> {
   const menciones = await query<FilaMencion>(
     `SELECT t.symbol, me.chain, me.address, c.title AS canal, me.posted_at,
             me.resuelto_por, me.es_primera, me.anticipacion_seg,
+            me.anticipacion_veredicto,
             t.last_opportunity AS opportunity, t.last_risk AS risk
        FROM tg_mentions me
        JOIN tg_channels c ON c.id = me.channel_id
@@ -130,8 +140,11 @@ export async function renderTelegram(): Promise<string> {
       ? '<tr><td colspan="6" class="empty">Ningun canal vigilado todavia.</td></tr>'
       : fuentes
           .map((f) => {
+            // El acierto se mide sobre lo que se pudo comprobar. Dividir
+            // por todas las menciones hundia a los canales por su propio
+            // historico, que es imposible de medir.
             const tasa =
-              f.menciones > 0 ? Math.round((f.adelantadas / f.menciones) * 100) : null;
+              f.medibles > 0 ? Math.round((f.adelantadas / f.medibles) * 100) : null;
             const color =
               tasa === null ? 'gray' : tasa >= 50 ? 'green' : tasa >= 25 ? 'yellow' : 'red';
             return `<tr>
@@ -139,7 +152,7 @@ export async function renderTelegram(): Promise<string> {
               <td class="num">${f.mensajes}</td>
               <td class="num">${f.menciones}</td>
               <td class="num">${f.primeras}</td>
-              <td class="num">${f.adelantadas}</td>
+              <td class="num">${f.adelantadas}<span class="dim small"> de ${f.medibles}</span></td>
               <td>${tasa === null ? '<span class="dim">sin datos</span>' : `<span class="badge ${color}">${tasa}%</span>`}</td>
             </tr>`;
           })
@@ -155,7 +168,7 @@ export async function renderTelegram(): Promise<string> {
                   ${m.es_primera ? '<span class="badge blue">1a vez</span>' : ''}</td>
               <td>${escapeHtml(m.canal ?? '')}</td>
               <td><span class="badge gray">${escapeHtml(m.resuelto_por)}</span></td>
-              <td>${minutos(m.anticipacion_seg)}</td>
+              <td>${minutos(m.anticipacion_seg, m.anticipacion_veredicto)}</td>
               <td class="num">${m.opportunity ?? '<span class="dim">-</span>'}</td>
               <td class="num">${m.risk ?? '<span class="dim">-</span>'}</td>
             </tr>`,
