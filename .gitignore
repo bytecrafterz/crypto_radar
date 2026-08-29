@@ -52,3 +52,6 @@ docs/cliente/
 # Mensajes y entregas para el cliente: no van al repositorio publico.
 entregas/
 entrega/
+
+# Claves SSH del servidor: nunca al repositorio.
+claves/

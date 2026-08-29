@@ -31,6 +31,38 @@ const timers: NodeJS.Timeout[] = [];
  * Bucle que se reprograma solo despues de cada vuelta.
  * Asi nunca hay dos ejecuciones de la misma tarea a la vez.
  */
+/**
+ * Tope de tiempo para una vuelta.
+ *
+ * Existe porque una vuelta colgada mataba el bucle entero y en silencio.
+ * La siguiente vuelta se programa DESPUES de que termine la anterior, asi
+ * que si una no terminaba nunca, no se programaba ninguna mas y no
+ * quedaba ni un aviso en el registro. Paso de verdad: una llamada a
+ * Telegram se quedo esperando y el Robot 2 estuvo dos dias parado
+ * mientras el resto del sistema seguia funcionando con normalidad.
+ *
+ * Diez minutos es de sobra para cualquier vuelta legitima. Lo que tarde
+ * mas que eso esta colgado, no lento.
+ */
+const TOPE_VUELTA_MS = 10 * 60_000;
+
+/**
+ * Devuelve la promesa, pero rindiendose si tarda demasiado.
+ *
+ * La tarea original sigue viva por debajo, porque no se puede cancelar
+ * una promesa. Lo que se rescata es el bucle: puede seguir programando
+ * vueltas en vez de quedarse esperando para siempre.
+ */
+function conTope<T>(promesa: Promise<T>, ms: number, nombre: string): Promise<T> {
+  return new Promise<T>((resolver, rechazar) => {
+    const reloj = setTimeout(
+      () => rechazar(new Error(`la tarea ${nombre} paso de ${Math.round(ms / 1000)} s sin terminar`)),
+      ms,
+    );
+    promesa.then(resolver, rechazar).finally(() => clearTimeout(reloj));
+  });
+}
+
 function loop(name: string, intervalMs: () => number, task: () => Promise<unknown>): void {
   let busy = false;
 
@@ -42,7 +74,7 @@ function loop(name: string, intervalMs: () => number, task: () => Promise<unknow
       busy = true;
       const started = Date.now();
       try {
-        await task();
+        await conTope(Promise.resolve(task()), TOPE_VUELTA_MS, name);
       } catch (err) {
         log.error({ tarea: name, err: String(err) }, 'error en la tarea');
         await logActivity('error', name, `Error en la tarea: ${String(err)}`).catch(() => {});

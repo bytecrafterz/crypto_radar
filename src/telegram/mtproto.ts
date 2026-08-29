@@ -29,6 +29,51 @@ export function pausa(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * Tope de tiempo para una llamada a Telegram.
+ *
+ * La libreria no trae ninguno. Si la conexion se queda a medias, sin
+ * cerrarse pero sin responder, la llamada espera indefinidamente. Y como
+ * el colector va en un bucle que espera a que termine una vuelta antes de
+ * programar la siguiente, una sola llamada colgada dejaba al Robot 2
+ * parado del todo y sin dejar rastro en el registro.
+ */
+const TOPE_LLAMADA_MS = 45_000;
+
+/**
+ * Ejecuta una operacion de Telegram con tope de tiempo.
+ *
+ * Si se agota, se tira la conexion para que la siguiente llamada abra una
+ * nueva. Una conexion que ya no responde no se arregla sola: insistir
+ * sobre ella es quedarse colgado otra vez.
+ */
+async function conTope<T>(
+  operacion: () => Promise<T>,
+  etiqueta: string,
+  siFalla: T,
+): Promise<T> {
+  let reloj: NodeJS.Timeout | undefined;
+  try {
+    return await new Promise<T>((resolver, rechazar) => {
+      reloj = setTimeout(
+        () => rechazar(new Error('sin respuesta en ' + Math.round(TOPE_LLAMADA_MS / 1000) + ' s')),
+        TOPE_LLAMADA_MS,
+      );
+      operacion().then(resolver, rechazar);
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.warn({ operacion: etiqueta, err: msg }, 'llamada a Telegram fallida o colgada');
+    if (msg.includes('sin respuesta')) {
+      // Conexion muerta: se descarta para que la proxima empiece limpia.
+      cliente = null;
+    }
+    return siFalla;
+  } finally {
+    if (reloj) clearTimeout(reloj);
+  }
+}
+
 export function estaConfigurado(): boolean {
   return Boolean(
     process.env.TELEGRAM_API_ID &&
@@ -57,7 +102,22 @@ export async function conectar(): Promise<TelegramClient | null> {
     },
   );
 
-  await cliente.connect();
+  // connect() tampoco tiene tope propio: si la red se queda a medias,
+  // se espera para siempre antes de haber hecho nada.
+  const abierto = await new Promise<boolean>((resolver) => {
+    const reloj = setTimeout(() => resolver(false), TOPE_LLAMADA_MS);
+    cliente!.connect().then(
+      () => { clearTimeout(reloj); resolver(true); },
+      () => { clearTimeout(reloj); resolver(false); },
+    );
+  });
+
+  if (!abierto) {
+    log.warn('no se pudo abrir la conexion con Telegram; se reintentara en la proxima vuelta');
+    cliente = null;
+    return null;
+  }
+
   return cliente;
 }
 
@@ -85,7 +145,12 @@ export async function buscarCanales(consulta: string, limite = 10): Promise<Cana
   if (!cli) return [];
 
   try {
-    const r = await cli.invoke(new Api.contacts.Search({ q: consulta, limit: limite }));
+    const r = await conTope(
+      () => cli.invoke(new Api.contacts.Search({ q: consulta, limit: limite })),
+      'buscar ' + consulta,
+      null as unknown as Api.contacts.Found,
+    );
+    if (!r) return [];
     return (r.chats ?? [])
       .filter((c) => c.className === 'Channel')
       .map((c) => {
@@ -112,8 +177,8 @@ export async function mirarCanal(username: string): Promise<CanalEncontrado | nu
   if (!cli) return null;
 
   try {
-    const ent = await cli.getEntity(username);
-    if (ent.className !== 'Channel') return null;
+    const ent = await conTope(() => cli.getEntity(username), 'mirar @' + username, null);
+    if (!ent || ent.className !== 'Channel') return null;
     const c = ent as Api.Channel;
 
     // getEntity NO trae el numero de miembros: ese dato solo viene en la
@@ -212,9 +277,14 @@ export async function leerCanal(
   if (!cli) return [];
 
   try {
-    const ent = await cli.getEntity(username);
+    const ent = await conTope(() => cli.getEntity(username), 'abrir @' + username, null);
+    if (!ent) return [];
     const c = ent as Api.Channel;
-    const mensajes = await cli.getMessages(ent, { limit: limite, minId: desdeId });
+    const mensajes = await conTope(
+      () => cli.getMessages(ent, { limit: limite, minId: desdeId }),
+      'leer @' + username,
+      [] as unknown as Awaited<ReturnType<typeof cli.getMessages>>,
+    );
 
     return mensajes
       .filter((m) => m.message)
@@ -270,7 +340,11 @@ export async function misCanales(): Promise<CanalEncontrado[]> {
   if (!cli) return [];
 
   try {
-    const dialogos = await cli.getDialogs({ limit: 400 });
+    const dialogos = await conTope(
+      () => cli.getDialogs({ limit: 400 }),
+      'listar mis canales',
+      [] as unknown as Awaited<ReturnType<typeof cli.getDialogs>>,
+    );
     return dialogos
       .filter((d) => d.isChannel)
       .map((d) => {
