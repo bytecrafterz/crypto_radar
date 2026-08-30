@@ -50,6 +50,8 @@ async function reunirSenalSocial(chain: string, address: string): Promise<Entrad
   const f = await queryOne<{
     fuentes_total: number;
     fuentes_indep: number;
+    fuentes_utiles: number | null;
+    con_informacion: number | null;
     anticipacion: number | null;
     reputacion: number | null;
     tipo: string | null;
@@ -57,6 +59,15 @@ async function reunirSenalSocial(chain: string, address: string): Promise<Entrad
     `SELECT COUNT(DISTINCT me.channel_id)::int                        AS fuentes_total,
             -- Textos distintos = fuentes que no se estan copiando
             COUNT(DISTINCT m.text_hash)::int                          AS fuentes_indep,
+            -- Fuentes que ademas dicen algo, no que solo venden.
+            -- Una promocion pagada NO es una fuente independiente por
+            -- mucho que venga de otro canal: es el mismo interes pagando
+            -- dos veces, y contarla como tal es justo lo que dispara una
+            -- alerta en falso.
+            COUNT(DISTINCT m.text_hash) FILTER (
+              WHERE m.clasificacion IS NULL OR m.clasificacion = 'informacion'
+            )::int                                                    AS fuentes_utiles,
+            COUNT(*) FILTER (WHERE m.clasificacion = 'informacion')::int AS con_informacion,
             AVG(me.anticipacion_seg)::int                             AS anticipacion,
             AVG(COALESCE(s.tasa_utiles, 0))::int                      AS reputacion,
             MAX(me.tipo_senal)                                        AS tipo
@@ -71,13 +82,16 @@ async function reunirSenalSocial(chain: string, address: string): Promise<Entrad
 
   return {
     fuentesTotal: f.fuentes_total,
-    fuentesIndependientes: Math.max(1, f.fuentes_indep),
+    // Si el clasificador esta puesto, mandan las fuentes que informan.
+    // Sin clasificador, clasificacion es NULL y esto vale lo mismo que
+    // antes, asi que el sistema se comporta igual que hasta ahora.
+    fuentesIndependientes: Math.max(1, f.fuentes_utiles ?? f.fuentes_indep),
     anticipacionSeg: f.anticipacion,
     reputacionMedia: f.reputacion ?? 0,
-    // Sin el clasificador por modelo no se puede afirmar que algo se ha
-    // verificado. Se deja en false a proposito: es mejor quedarse corto
-    // que dar por comprobado lo que no lo esta.
-    afirmacionVerificada: false,
+    // Ahora si se puede afirmar algo: hay al menos un mensaje que el
+    // clasificador dio por informacion comprobable y no por publicidad.
+    // Sin clasificador sigue siendo false, que es lo prudente.
+    afirmacionVerificada: (f.con_informacion ?? 0) > 0,
     tipoSenal: f.tipo ?? 'general',
   };
 }

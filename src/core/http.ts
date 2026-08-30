@@ -41,6 +41,11 @@ export const PROVIDER_LIMITS: Record<string, ProviderLimits> = {
   honeypot: { rps: 1, perDay: 0, concurrency: 1 },
   basescan: { rps: 3, perDay: 90_000, concurrency: 2 },
   jupiter: { rps: 2, perDay: 0, concurrency: 2 },
+  // Modelo de lenguaje. Va deliberadamente despacio por dos motivos: las
+  // capas gratuitas limitan por minuto y se bloquean si te pasas, y este
+  // es el unico servicio que puede costar dinero. El tope diario hace de
+  // freno: aunque algo se desmadre, no puede gastar sin limite.
+  llm: { rps: 0.2, perDay: 800, concurrency: 1 },
   telegram: { rps: 1, perDay: 0, concurrency: 1 },
 };
 

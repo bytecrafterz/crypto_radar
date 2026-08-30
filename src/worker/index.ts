@@ -20,6 +20,8 @@ import { runDescubrimiento } from '../telegram/descubrimiento.js';
 import { runColectorMt, sincronizarCanales } from '../telegram/colector-mt.js';
 import { runRobot3 } from '../robot3/evaluador.js';
 import { vigilar, latir, runVigilante } from './vigilante.js';
+import { runClasificador } from '../telegram/clasificador.js';
+import { hayModelo } from '../core/llm.js';
 import { estaConfigurado as mtprotoListo } from '../telegram/mtproto.js';
 import { notify, activeChannels } from './notify.js';
 
@@ -174,6 +176,15 @@ export async function startWorker(): Promise<void> {
         loop('robot2-sincronizar', () => 60 * 60_000, sincronizarCanales);
       } else {
         log.info('sin credenciales MTProto: el Robot 2 solo lee donde se le invite');
+      }
+
+      // Segunda etapa del triaje. Solo si hay modelo configurado: sin
+      // clave, el sistema se queda exactamente como estaba.
+      if (hayModelo()) {
+        log.info('segunda etapa del triaje activa');
+        loop('robot2-clasificador', () => 3 * 60_000, runClasificador);
+      } else {
+        log.info('sin modelo de lenguaje: el triaje se queda en las reglas gratuitas');
       }
     } else {
       log.warn({ error: bot.error }, 'token de Telegram configurado pero el bot no responde');
