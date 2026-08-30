@@ -1,0 +1,267 @@
+# nginx configuration for 169.58.161.228
+#
+# Layout:
+#   stream {}  -> MQTT  :1883 plain and :8883 TLS -> broker on 127.0.0.1:11883
+#   http   {}  -> crypto-radar.duckdns.org  (:80 ACME + redirect, :443 panel)
+#                 plus a :443 catch-all that drops unknown hosts
+#
+# The broker listens on 127.0.0.1:11883, NOT 1883. nginx binds 0.0.0.0:1883
+# exclusively on Windows, so a broker on 127.0.0.1:1883 fails to bind with
+# WSAEACCES ("socket accessed in a way forbidden by its access permissions")
+# and the service dies seconds after starting. Keep the two ports distinct.
+
+worker_processes  1;
+
+error_log  logs/error.log  notice;
+pid        logs/nginx.pid;
+
+events {
+    worker_connections  1024;
+}
+
+
+# ---------------------------------------------------------------------------
+# MQTT  (TCP stream proxy)
+# ---------------------------------------------------------------------------
+stream {
+    log_format  mqtt  '$remote_addr [$time_local] $protocol $status '
+                      '$bytes_received $bytes_sent $session_time';
+    access_log  logs/mqtt.access.log  mqtt;
+
+    upstream mqtt_broker {
+        server 127.0.0.1:11883;
+    }
+
+    # Plain MQTT - what the current firmware speaks (PULSE_USE_TLS 0).
+    server {
+        listen               1883;
+        proxy_pass           mqtt_broker;
+        proxy_connect_timeout 10s;
+        proxy_timeout        1h;      # must exceed the device MQTT keepalive
+    }
+
+    # MQTT over TLS - DISABLED 2026-08-27, with edwin-iot-server.duckdns.org.
+    #
+    # This listener served a certificate for edwin-iot-server.duckdns.org,
+    # renewed through that hostname's ACME challenge on :80. With the hostname
+    # gone there is nothing left to renew it. The certificate is valid until
+    # 2026-11-18 and would then quietly expire, so a device switching to TLS
+    # in December would fail against an expired certificate with no obvious
+    # cause and no recent change to blame.
+    #
+    # Disabled rather than repointed at another host's certificate: a
+    # certificate whose name does not match what the client dialled fails for
+    # anything that validates, and is silently accepted by anything that does
+    # not - which is the worse of the two outcomes.
+    #
+    # Nothing is lost today. :8883 had zero connections, and the firmware
+    # speaks plain MQTT on :1883 (PULSE_USE_TLS 0), which is untouched above.
+    #
+    # TO BRING IT BACK: issue a certificate for a hostname this box still
+    # serves, point the two paths at it, uncomment, and make sure whatever
+    # renews it also reloads nginx.
+    #
+    #server {
+    #    listen               8883 ssl;
+    #    ssl_certificate      C:/nginx/conf/ssl/<hostname>-chain.pem;
+    #    ssl_certificate_key  C:/nginx/conf/ssl/<hostname>-key.pem;
+    #    ssl_protocols        TLSv1.2 TLSv1.3;
+    #    ssl_ciphers          HIGH:!aNULL:!MD5;
+    #    ssl_session_cache    shared:MQTT_SSL:10m;
+    #    ssl_session_timeout  1h;
+    #
+    #    proxy_pass           mqtt_broker;
+    #    proxy_connect_timeout 10s;
+    #    proxy_timeout        1h;
+    #}
+}
+
+
+# ---------------------------------------------------------------------------
+# HTTP / HTTPS
+# ---------------------------------------------------------------------------
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+    access_log  logs/access.log  main;
+
+    sendfile           on;
+    keepalive_timeout  65;
+    server_tokens      off;
+
+    # Long duckdns hostnames overflow the default 32-byte bucket.
+    server_names_hash_bucket_size  64;
+
+    # Limite de intentos de acceso al panel del radar.
+    limit_req_zone $binary_remote_addr zone=radar_login:10m rate=12r/m;
+    # La API del radar la usa el propio sistema, no una persona. 60 por
+    # minuto es de sobra para eso y deja fuera a quien quiera martillearla.
+    limit_req_zone $binary_remote_addr zone=radar_api:10m rate=60r/m;
+
+    # --- Asistente Maiko -------------------------------------------
+    include C:/Users/Administrator/Documents/chatbot/nginx/asistente.conf;
+
+    # Anything hitting the bare IP or an unknown Host: drop it.
+    server {
+        listen      80 default_server;
+        server_name _;
+        return      444;
+    }
+
+    # --- Crypto Radar: puerto 80 solo para el reto ACME ------------------
+    # Sin este bloque, el dominio del radar cae en el default_server que
+    # devuelve 444, y Let's Encrypt no puede validar el dominio.
+    server {
+        listen       80;
+        server_name  crypto-radar.duckdns.org;
+
+        location /.well-known/acme-challenge/ {
+            root          html/acme;
+            default_type  "text/plain";
+        }
+
+        location / {
+            return 301 https://$host$request_uri;
+        }
+    }
+
+    # edwin-iot-server.duckdns.org: REMOVED COMPLETELY, 2026-08-27.
+    #
+    # Its site went on 2026-08-24; the ACME challenge path stayed behind only
+    # because it renewed the certificate the MQTT :8883 listener was serving.
+    # That listener is now disabled (see the stream {} block above), so the
+    # dependency is gone and so is this hostname.
+    #
+    # Requests for it now fall to the :80 default_server and get 444.
+    #
+    # LEFT ON DISK ON PURPOSE: conf/ssl/edwin-iot-server.duckdns.org-*.pem and
+    # the fullchain.pem / privkey.pem copies. They are valid until 2026-11-18,
+    # they cost nothing to keep, and deleting them would make bringing MQTT
+    # TLS back a re-issue rather than an uncomment. Remove them once you are
+    # sure nothing wants them.
+    #
+    # C:\nginx\get-cert.ps1 still targets this hostname and will now FAIL,
+    # because there is no longer a challenge path for it. That is expected.
+    # Delete that script, or repoint it, when convenient.
+
+    # Estudio (wonderimg.duckdns.org) lives in its own file so this config
+    # stays reviewable. The :443 half is commented out inside it until the
+    # certificate exists -- nginx refuses to start if ssl_certificate points
+    # at a file that is not there.
+    include       C:/nginx/conf/wonderimg.conf;
+
+    # With no :443 default_server, an HTTPS request arriving with an unknown
+    # Host would fall through to the FIRST :443 block defined, and be answered
+    # with that site's certificate. The catch-all below prevents that.
+
+    # Anything reaching :443 with a Host we do not serve: drop it, rather
+    # than leaking whichever site happens to be defined first.
+    server {
+        listen       443 ssl default_server;
+        http2        on;
+        server_name  _;
+
+        # A default_server still needs a certificate to complete the handshake
+        # before it can drop the connection, so this points at one that is
+        # ACTIVELY RENEWED (the CryptoRadar-Certificado task). It used to use
+        # the edwin-iot pair, which after today renews for nothing and expires
+        # on 2026-11-18 - an expired certificate on the block that greets every
+        # stray scan is a bad look and an easy thing to never notice.
+        #
+        # The name will not match whatever was dialled. That is fine and
+        # expected here: this block exists to refuse the request, and it does
+        # so immediately afterwards.
+        ssl_certificate      C:/Users/Administrator/Documents/Blockchain/nginx/ssl/crypto-radar-fullchain.pem;
+        ssl_certificate_key  C:/Users/Administrator/Documents/Blockchain/nginx/ssl/crypto-radar-key.pem;
+
+        return 444;
+    }
+
+# --- HTTPS: el panel ------------------------------------------------------
+server {
+    listen       443 ssl;
+    http2        on;
+    server_name  crypto-radar.duckdns.org;
+
+    ssl_certificate      C:/Users/Administrator/Documents/Blockchain/nginx/ssl/crypto-radar-fullchain.pem;
+    ssl_certificate_key  C:/Users/Administrator/Documents/Blockchain/nginx/ssl/crypto-radar-key.pem;
+    ssl_protocols        TLSv1.2 TLSv1.3;
+    ssl_session_cache    shared:SSL:10m;
+
+    # El panel maneja una contrasena: sin esto viajaria en claro.
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options    "nosniff" always;
+    add_header X-Frame-Options           "SAMEORIGIN" always;
+    add_header Referrer-Policy           "no-referrer" always;
+
+    # No queremos que el panel aparezca en buscadores.
+    add_header X-Robots-Tag "noindex, nofollow" always;
+
+      # Comprimir. El panel es HTML generado en el servidor y se mira
+      # mucho desde el movil: comprimido baja bastante mas rapido. Va aqui
+      # dentro y no en el global para no tocar los otros sitios que sirve
+      # este mismo nginx.
+      gzip              on;
+      gzip_min_length   1024;
+      gzip_proxied      any;
+      gzip_vary         on;
+      gzip_types        text/plain text/css text/javascript
+                        application/javascript application/json
+                        image/svg+xml;
+
+      # Si el radar esta reiniciando, una pagina que lo explique en vez de
+      # un error pelado. Los reinicios duran segundos, y un 502 hace pensar
+      # que se ha roto algo cuando no es asi.
+      error_page 502 503 504 /_mantenimiento.html;
+
+      location = /_mantenimiento.html {
+          root      C:/Users/Administrator/Documents/Blockchain/nginx/html;
+          try_files /mantenimiento.html =503;
+          internal;
+      }
+
+      # La API la llama el propio sistema, no una persona. Se limita igual
+      # que el acceso: que pida una clave no evita que la martilleen.
+      location = /api/candidato {
+          limit_req zone=radar_api burst=20 nodelay;
+          limit_req_status 429;
+          proxy_pass http://127.0.0.1:3000;
+          include    C:/Users/Administrator/Documents/Blockchain/nginx/proxy_params_radar.conf;
+      }
+
+    # Limite de intentos de acceso, para que nadie pruebe contrasenas a lo
+    # bruto. La zona se declara una sola vez, mas abajo.
+    location = /entrar {
+        limit_req zone=radar_login burst=5 nodelay;
+        limit_req_status 429;
+        proxy_pass http://127.0.0.1:3000;
+        include    C:/Users/Administrator/Documents/Blockchain/nginx/proxy_params_radar.conf;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        include    C:/Users/Administrator/Documents/Blockchain/nginx/proxy_params_radar.conf;
+    }
+}
+
+
+}
+
+# ---------------------------------------------------------------------------
+# Notes
+#
+# 1. conf/ssl/fullchain.pem is currently a SELF-SIGNED placeholder so that
+#    nginx starts. Replace both files in place with the real Let's Encrypt
+#    pair - the filenames are referenced above, so no config edit is needed.
+#
+# 2. mosquitto.conf must keep the broker off the public interface:
+#        listener 11883 127.0.0.1
+#        allow_anonymous false
+#        password_file C:\Program Files\mosquitto\passwd
+#
+# 3. Firewall: open TCP 80, 443, 8883 (and 1883 only during the migration).
+# ---------------------------------------------------------------------------

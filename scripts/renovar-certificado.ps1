@@ -28,6 +28,34 @@ try {
         Copy-Item $cert.FullChainFile (Join-Path $SSL 'crypto-radar-fullchain.pem') -Force
         Copy-Item $cert.KeyFile       (Join-Path $SSL 'crypto-radar-key.pem')       -Force
 
+        # Hay DOS nginx en esta maquina y solo se avisaba a uno:
+        #
+        #   C:
+ginx               -> puertos 80 y 443, el que sirve el dominio
+        #   C:	ools
+ginx-1.28.0  -> puertos 8080 y 8443, el de pruebas
+        #
+        # Se reiniciaba solo el de pruebas. El publico se quedaba con el
+        # certificado viejo cargado en memoria hasta que alguien lo
+        # reiniciara a mano, asi que el dia que caducara el viejo el panel
+        # se habria quedado sin HTTPS sin que nadie hubiera tocado nada.
+        $recargado = $false
+        try {
+            & "C:\nginx\nginx.exe" -p "C:
+ginx" -c "conf
+ginx.conf" -s reload 2>$null
+            if ($LASTEXITCODE -eq 0) { $recargado = $true }
+        } catch { }
+
+        if ($recargado) {
+            Apunte "nginx publico recargado con el certificado nuevo"
+        } else {
+            # Recargarlo exige los mismos permisos con los que se arranco.
+            # Si esta tarea no corre elevada no puede, y hay que enterarse:
+            # el certificado estaria renovado en disco pero no en uso.
+            Apunte "AVISO: no se pudo recargar el nginx publico; la tarea necesita privilegios elevados"
+        }
+
         # nginx solo lee los certificados al arrancar.
         Get-Process nginx -ErrorAction SilentlyContinue |
             Where-Object { $_.Path -like '*tools*' } |
