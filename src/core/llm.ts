@@ -77,7 +77,11 @@ export function hayModelo(): boolean {
 export async function preguntar(
   instruccion: string,
   texto: string,
-  maxTokens = 200,
+  // Generoso a proposito. Los modelos que razonan consumen la mayor
+  // parte del presupuesto pensando antes de escribir nada: con un tope
+  // bajo se quedan sin margen y devuelven una respuesta vacia, sin
+  // error y sin ninguna pista de por que.
+  maxTokens = 800,
 ): Promise<string | null> {
   const c = configLlm();
   if (!c) return null;
@@ -107,7 +111,12 @@ export async function preguntar(
     }
 
     if (c.proveedor === 'gemini') {
-      const modelo = c.modelo || 'gemini-2.0-flash';
+      // La cuota gratuita de Google va POR MODELO y por dia, y en los
+      // modelos grandes es ridicula: gemini-3.6-flash da 20 peticiones
+      // diarias, menos de lo que gastamos en una manana. Los 'lite'
+      // tienen mucho mas margen y para decidir si un mensaje informa o
+      // vende aciertan igual, comprobado caso por caso.
+      const modelo = c.modelo || 'gemini-3.5-flash-lite';
       const r = await request<{
         candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
       }>(`${c.base}/v1beta/models/${modelo}:generateContent?key=${c.clave}`, {
@@ -121,7 +130,11 @@ export async function preguntar(
           generationConfig: { maxOutputTokens: maxTokens, temperature: 0 },
         },
       });
-      return r?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+      // Los modelos que razonan devuelven varias partes y no siempre la
+      // primera lleva el texto: puede venir antes el rastro del
+      // razonamiento. Se busca la primera que de verdad tenga texto.
+      const partes = r?.candidates?.[0]?.content?.parts ?? [];
+      return partes.find((p) => typeof p.text === 'string' && p.text.length > 0)?.text ?? null;
     }
 
     // Compatible con OpenAI: Groq, OpenRouter, Ollama, y un modelo local.

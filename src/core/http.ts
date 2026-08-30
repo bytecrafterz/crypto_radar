@@ -45,7 +45,7 @@ export const PROVIDER_LIMITS: Record<string, ProviderLimits> = {
   // capas gratuitas limitan por minuto y se bloquean si te pasas, y este
   // es el unico servicio que puede costar dinero. El tope diario hace de
   // freno: aunque algo se desmadre, no puede gastar sin limite.
-  llm: { rps: 0.2, perDay: 800, concurrency: 1 },
+  llm: { rps: 0.1, perDay: 800, concurrency: 1 },
   telegram: { rps: 1, perDay: 0, concurrency: 1 },
 };
 

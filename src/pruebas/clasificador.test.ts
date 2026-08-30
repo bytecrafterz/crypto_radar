@@ -48,3 +48,18 @@ test('el motivo se recorta para que no ocupe la base de datos entera', () => {
   const v = leerRespuesta(`{"clase":"hype","confianza":50,"motivo":"${largo}"}`);
   assert.ok((v?.motivo.length ?? 0) <= 200);
 });
+
+test('una confianza en fraccion se entiende como porcentaje', () => {
+  // Se pide un entero de 0 a 100 y aun asi Gemini contesta 0.98. Sin
+  // corregirlo, un 98 por ciento de confianza se guardaba como un 1.
+  assert.equal(leerRespuesta('{"clase":"hype","confianza":0.98,"motivo":"x"}')?.confianza, 98);
+  assert.equal(leerRespuesta('{"clase":"hype","confianza":0.5,"motivo":"x"}')?.confianza, 50);
+});
+
+test('un entero normal no se toca', () => {
+  assert.equal(leerRespuesta('{"clase":"hype","confianza":85,"motivo":"x"}')?.confianza, 85);
+  assert.equal(leerRespuesta('{"clase":"hype","confianza":100,"motivo":"x"}')?.confianza, 100);
+  // El 1 es el caso ambiguo: se trata como fraccion, que es lo que
+  // devuelven los modelos en la practica.
+  assert.equal(leerRespuesta('{"clase":"hype","confianza":0,"motivo":"x"}')?.confianza, 0);
+});
