@@ -19,6 +19,7 @@ import { actualizarPendientes, recalcularReputacion } from '../telegram/anticipa
 import { runDescubrimiento } from '../telegram/descubrimiento.js';
 import { runColectorMt, sincronizarCanales } from '../telegram/colector-mt.js';
 import { runRobot3 } from '../robot3/evaluador.js';
+import { vigilar, latir, runVigilante } from './vigilante.js';
 import { estaConfigurado as mtprotoListo } from '../telegram/mtproto.js';
 import { notify, activeChannels } from './notify.js';
 
@@ -66,6 +67,9 @@ function conTope<T>(promesa: Promise<T>, ms: number, nombre: string): Promise<T>
 function loop(name: string, intervalMs: () => number, task: () => Promise<unknown>): void {
   let busy = false;
 
+  // Se apunta para que se le eche de menos si algun dia deja de venir.
+  vigilar(name, intervalMs);
+
   const tick = async () => {
     if (!running) return;
     if (busy) {
@@ -80,6 +84,10 @@ function loop(name: string, intervalMs: () => number, task: () => Promise<unknow
         await logActivity('error', name, `Error en la tarea: ${String(err)}`).catch(() => {});
       } finally {
         busy = false;
+        // La vuelta ha terminado, con exito o con error. Lo que importa
+        // para el vigilante es que el bucle sigue vivo: un error que se
+        // repite es un problema distinto y ya se registra aparte.
+        await latir(name);
         const elapsed = Date.now() - started;
         if (elapsed > 60_000) log.warn({ tarea: name, segundos: Math.round(elapsed / 1000) }, 'vuelta lenta');
       }
@@ -120,6 +128,10 @@ export async function startWorker(): Promise<void> {
   loop('analisis', () => 60_000, runEnrichment);
   loop('seguimiento', () => getFilters().monitoring.interval_minutes * 60_000, runMonitor);
   loop('consumo', () => 300_000, persistUsage);
+
+  // Vigilante: comprueba que ningun bucle se haya quedado callado. Va el
+  // ultimo a proposito, para que los demas ya se hayan apuntado.
+  loop('vigilante', () => 5 * 60_000, runVigilante);
 
   // --- Robot 2: radar de informacion en Telegram -------------------------
   // Solo arranca si hay token configurado. Sin el, el resto del sistema

@@ -2,6 +2,7 @@
  * Paginas del panel web.
  */
 import { query, getState } from '../core/db.js';
+import { estadoDeLasTareas } from '../worker/vigilante.js';
 import * as repo from '../core/repo.js';
 import type { StoredToken } from '../core/repo.js';
 import { getUsage } from '../core/http.js';
@@ -828,6 +829,7 @@ export async function renderSystem(): Promise<string> {
   const usage = getUsage();
   const warnings = checkEnv();
   const activity = await repo.recentActivity(60);
+  const tareas = await estadoDeLasTareas();
 
   const usageRows =
     usage.length === 0
@@ -870,6 +872,40 @@ export async function renderSystem(): Promise<string> {
     { title: 'Sistema', active: 'sistema' },
     `<h1>Sistema</h1>
      <p class="sub">Configuracion activa y consumo de los servicios gratuitos.</p>
+
+     <h2>Estado de los robots</h2>
+     <p class="sub small">
+       Cada tarea deja constancia de su ultima vuelta. Si alguna se queda
+       callada mas de lo que deberia, el sistema avisa por Discord en vez de
+       quedarse parado aparentando que funciona.
+     </p>
+     ${(() => {
+       const cuenta = (ms: number | null): string => {
+         if (ms === null) return 'aun no ha dado su primera vuelta';
+         const min = Math.round(ms / 60000);
+         if (min < 1) return 'hace menos de un minuto';
+         if (min < 60) return 'hace ' + min + ' min';
+         const h = Math.round(min / 60);
+         return h < 48 ? 'hace ' + h + ' h' : 'hace ' + Math.round(h / 24) + ' dias';
+       };
+       const caidas = tareas.filter((t) => t.caida);
+       const cabecera = caidas.length === 0
+         ? '<div class="note">Todas las tareas estan al dia.</div>'
+         : '<div class="note warn"><b>' + caidas.length + ' tarea(s) sin dar senales:</b> ' +
+           caidas.map((c) => escapeHtml(c.nombre)).join(', ') + '</div>';
+       return cabecera + '<div class="table-wrap"><table><thead><tr>' +
+         '<th>Tarea</th><th>Ultima vuelta</th><th>Estado</th>' +
+         '</tr></thead><tbody>' +
+         tareas.map((t) =>
+           '<tr><td><b>' + escapeHtml(t.nombre) + '</b></td>' +
+           '<td>' + cuenta(t.callada_ms) + '</td>' +
+           '<td>' + (t.caida
+             ? '<span class="badge red">parada</span>'
+             : t.ultimoLatido === null
+               ? '<span class="badge gray">arrancando</span>'
+               : '<span class="badge green">al dia</span>') + '</td></tr>').join('') +
+         '</tbody></table></div>';
+     })()}
 
      <div class="card" style="margin-bottom:16px">
        <h3>Avisos por Discord ${pausado ? '<span class="badge red">pausados</span>' : '<span class="badge green">activos</span>'}</h3>
