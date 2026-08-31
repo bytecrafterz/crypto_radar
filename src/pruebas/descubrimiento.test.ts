@@ -94,3 +94,30 @@ test('por defecto se puntua como busqueda, sin cambiar lo de antes', () => {
   assert.equal(puntuar('Solana Research', 10_000).score,
                puntuar('Solana Research', 10_000, 'busqueda').score);
 });
+
+test('un canal de "calls" ya no puntua mejor que uno de analisis', () => {
+  // El fallo que se descubrio con datos reales: 'alpha' sumaba puntos, y
+  // los canales llamados "alpha calls" resultaron ser los mas
+  // promocionales de todos. Se premiaba lo contrario de lo que se busca.
+  const llamadas = puntuar('Alpha Calls Solana', 10_000);
+  const analisis = puntuar('Solana Onchain Research', 10_000);
+
+  assert.ok(analisis.score > llamadas.score,
+    'un canal de analisis tiene que puntuar por encima de uno de llamadas');
+});
+
+test('las palabras que suman son las de informar, no las de vender', () => {
+  const base = puntuar('Solana Chat', 10_000).score;
+  for (const buena of ['Research', 'News', 'Scanner', 'Audit', 'Security', 'Noticias']) {
+    assert.ok(puntuar(`Solana ${buena}`, 10_000).score > base,
+      `"${buena}" deberia sumar`);
+  }
+});
+
+test('la promocion descarada sigue restando', () => {
+  const limpio = puntuar('Solana Research', 10_000).score;
+  for (const mala of ['VIP', 'PUMP', '1000x', 'premium']) {
+    assert.ok(puntuar(`Solana Research ${mala}`, 10_000).score < limpio,
+      `"${mala}" deberia restar`);
+  }
+});

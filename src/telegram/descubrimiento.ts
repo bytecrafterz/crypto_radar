@@ -40,10 +40,27 @@ const PAUSA_MS = 4000;
  * Se rota entre ellas: repetir la misma no aporta resultados nuevos.
  */
 const CONSULTAS = [
-  'solana calls', 'solana gems', 'base gems', 'memecoin calls',
-  'crypto calls', 'pumpfun', 'early calls', 'alpha calls', 'degen calls',
-  'cripto señales', 'criptomonedas alertas', 'señales cripto', 'gemas cripto',
-  'sinais cripto', 'cripto alertas', 'moedas cripto',
+  // LO QUE SE BUSCA AHORA Y POR QUE CAMBIO
+  // Antes se buscaban solo canales de "calls": alpha calls, degen calls,
+  // memecoin gems. Con el clasificador funcionando se vio el resultado en
+  // los numeros: de veintiuna menciones recogidas, diecinueve eran
+  // promocion pagada y una sola era informacion. Estabamos buscando justo
+  // los canales que venden.
+  //
+  // El Robot 3 necesita fuentes que informen, porque una promocion no
+  // cuenta como fuente independiente. Asi que ahora se busca sobre todo
+  // informacion, y se dejan unas pocas consultas de "calls" porque esos
+  // canales si llegan pronto y la anticipacion dira cuales valen.
+  'crypto news', 'onchain analysis', 'whale alerts', 'token unlocks',
+  'defi research', 'rug pull alerts', 'crypto security', 'token audit',
+  'solana news', 'base chain news', 'crypto research',
+  // Espanol
+  'noticias cripto', 'analisis cripto', 'alertas ballenas',
+  'seguridad cripto', 'estafas cripto',
+  // Portugues
+  'noticias cripto brasil', 'analise cripto', 'seguranca cripto',
+  // Un resto de canales de llamadas, que llegan pronto aunque vendan.
+  'solana calls', 'early calls',
 ];
 
 /** Enlaces a otros canales dentro de un texto. */
@@ -83,7 +100,15 @@ export function puntuar(
   }
 
   // Palabras que delatan promocion pagada mas que informacion.
-  const promo = ['pump', 'shill', '100x', '1000x', 'vip', 'premium', 'signal group', 'paid'];
+  // 'calls', 'gems', 'senales' y 'sinais' entraron aqui despues de ver
+  // los datos: de veintiuna menciones recogidas de canales asi,
+  // diecinueve eran promocion pagada y ni una sola era informacion. No se
+  // descartan del todo porque llegan pronto, pero no pueden seguir
+  // ganandole el sitio a un canal que si informa.
+  const promo = [
+    'pump', 'shill', '100x', '1000x', 'vip', 'premium', 'signal group', 'paid',
+    'calls', 'gems', 'senales', 'señales', 'sinais', 'degen', 'ape',
+  ];
   const hallado = promo.find((p) => t.includes(p));
   if (hallado) {
     score -= 15;
@@ -91,7 +116,13 @@ export function puntuar(
   }
 
   // Palabras que sugieren informacion o vigilancia.
-  const bueno = ['alpha', 'research', 'insider', 'scanner', 'radar', 'tracker', 'news'];
+  // 'alpha' estaba aqui y era un error: los canales que se llaman
+  // "alpha calls" resultaron ser los mas promocionales de todos. Premiarlo
+  // era premiar lo contrario de lo que se busca.
+  const bueno = [
+    'research', 'insider', 'scanner', 'radar', 'tracker', 'news',
+    'analysis', 'analisis', 'noticias', 'audit', 'auditoria', 'security',
+  ];
   const bien = bueno.find((p) => t.includes(p));
   if (bien) {
     score += 10;
@@ -382,6 +413,68 @@ export async function abandonarInutiles(): Promise<number> {
   return fuera;
 }
 
+/**
+ * Abandona canales que solo publican publicidad.
+ *
+ * POR QUE HACE FALTA ADEMAS DEL ANTERIOR
+ * El otro solo echa a los que no aportan NINGUNA mencion. Un canal que
+ * publica veinte promociones pagadas al dia si aporta menciones, asi que
+ * sobrevivia para siempre ocupando una plaza. Y para el Robot 3 no vale
+ * nada: una promocion no cuenta como fuente independiente.
+ *
+ * LA EXCEPCION QUE IMPORTA
+ * Un canal promocional que llega ANTES del movimiento si vale, aunque
+ * venda. El primero que medimos, Alpha Calls, publico un token casi
+ * cuatro horas antes de que el precio se moviera, y todos sus mensajes
+ * son promocion. Ese no se toca: la publicidad no cuenta como fuente,
+ * pero adelantarse al mercado es exactamente lo que buscamos.
+ *
+ * Asi que se echa solo al que ademas nunca se ha adelantado a nada.
+ */
+export async function abandonarSoloPublicidad(): Promise<number> {
+  const malos = await query<{ id: number; username: string; promo: number }>(
+    `SELECT d.id, d.username, COUNT(*) FILTER (WHERE m.clasificacion = 'promocion')::int AS promo
+       FROM tg_canales_descubiertos d
+       JOIN tg_channels c  ON c.username = d.username
+       JOIN tg_messages m  ON m.channel_id = c.id AND m.clasificado_at IS NOT NULL
+      WHERE d.estado = 'unido'
+        AND d.unido_at < now() - interval '7 days'
+      GROUP BY d.id, d.username
+      -- Muestra suficiente para juzgar, y ni una sola vez informacion.
+      HAVING COUNT(*) >= 8
+         AND COUNT(*) FILTER (WHERE m.clasificacion = 'informacion') = 0
+         -- Y que ademas nunca se haya adelantado al movimiento.
+         AND NOT EXISTS (
+           SELECT 1 FROM tg_mentions me
+            WHERE me.channel_id = c.id AND me.anticipacion_seg > 0)
+      LIMIT 2`,
+  );
+
+  let fuera = 0;
+  for (const m of malos) {
+    if (await salir(m.username)) {
+      await exec(
+        `UPDATE tg_canales_descubiertos
+            SET estado = 'abandonado',
+                motivo_estado = 'solo publicidad y nunca se adelanto al movimiento',
+                revisado_at = now()
+          WHERE id = $1`,
+        [m.id],
+      );
+      await exec(
+        `INSERT INTO tg_uniones (canal_id, username, accion, resultado, detalle)
+         VALUES ($1, $2, 'salida', 'ok', $3)`,
+        [m.id, m.username, `${m.promo} promociones y ninguna informacion`],
+      );
+      fuera++;
+    }
+    await pausa(PAUSA_MS);
+  }
+
+  if (fuera > 0) log.info({ fuera }, 'canales abandonados por publicar solo publicidad');
+  return fuera;
+}
+
 /** Una vuelta completa de descubrimiento. */
 export async function runDescubrimiento(): Promise<{
   buscados: number; enlaces: number; unidos: number; abandonados: number;
@@ -393,8 +486,9 @@ export async function runDescubrimiento(): Promise<{
   await completarSinMiembros();
   const unidos = await unirseALosMejores();
   const abandonados = await abandonarInutiles();
+  const publicitarios = await abandonarSoloPublicidad();
 
-  const r = { buscados, enlaces, unidos, abandonados };
+  const r = { buscados, enlaces, unidos, abandonados: abandonados + publicitarios };
   if (buscados + enlaces + unidos + abandonados > 0) {
     log.info(r, 'vuelta de descubrimiento');
   }
