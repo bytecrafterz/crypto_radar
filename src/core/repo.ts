@@ -650,8 +650,28 @@ export async function computeOutcome(token: StoredToken): Promise<void> {
   }
 
   const finalCap = last.market_cap_usd ?? 0;
-  const peakMultiple = entryCap > 0 ? peakCap / entryCap : null;
-  const finalMultiple = entryCap > 0 ? finalCap / entryCap : null;
+
+  /**
+   * Tope de los multiplos.
+   *
+   * La columna admite hasta 10^8 y sin tope la fila entera se rechazaba
+   * con "numeric field overflow", asi que el resultado de ese token no se
+   * guardaba nunca. Pasaba de verdad: 49 resultados perdidos en una sola
+   * manana, y en silencio, porque el error se quedaba en el registro de
+   * la base de datos y no en el del radar.
+   *
+   * Ocurre cuando el token se detecto con una capitalizacion casi nula:
+   * dividir por algo cercano a cero dispara el multiplo a millones. Un
+   * numero asi no es un resultado, es un artefacto de haber entrado
+   * demasiado pronto, y recortarlo conserva lo unico que importa, que es
+   * que subio muchisimo.
+   */
+  const TOPE_MULTIPLO = 99_999_999;
+  const acotar = (v: number | null): number | null =>
+    v === null || !Number.isFinite(v) ? null : Math.min(v, TOPE_MULTIPLO);
+
+  const peakMultiple = acotar(entryCap > 0 ? peakCap / entryCap : null);
+  const finalMultiple = acotar(entryCap > 0 ? finalCap / entryCap : null);
   const maxDrawdown = peakCap > 0 ? ((peakCap - finalCap) / peakCap) * 100 : null;
   const minutesToPeak = (peakAt.getTime() - first.ts.getTime()) / 60_000;
   const hoursTracked = (last.ts.getTime() - first.ts.getTime()) / 3_600_000;
