@@ -439,7 +439,10 @@ export async function abandonarSoloPublicidad(): Promise<number> {
        JOIN tg_messages m  ON m.channel_id = c.id AND m.clasificado_at IS NOT NULL
       WHERE d.estado = 'unido'
         AND d.unido_at < now() - interval '7 days'
-      GROUP BY d.id, d.username
+      -- c.id entra en el GROUP BY porque la subconsulta de abajo lo usa.
+      -- Sin el, PostgreSQL rechaza la consulta entera y la vuelta de
+      -- descubrimiento reventaba cada dos horas sin llegar al final.
+      GROUP BY d.id, d.username, c.id
       -- Muestra suficiente para juzgar, y ni una sola vez informacion.
       HAVING COUNT(*) >= 8
          AND COUNT(*) FILTER (WHERE m.clasificacion = 'informacion') = 0

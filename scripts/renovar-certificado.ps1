@@ -41,9 +41,7 @@ ginx-1.28.0  -> puertos 8080 y 8443, el de pruebas
         # se habria quedado sin HTTPS sin que nadie hubiera tocado nada.
         $recargado = $false
         try {
-            & "C:\nginx\nginx.exe" -p "C:
-ginx" -c "conf
-ginx.conf" -s reload 2>$null
+            & "C:\nginx\nginx.exe" -p "C:\nginx" -c "conf\nginx.conf" -s reload 2>$null
             if ($LASTEXITCODE -eq 0) { $recargado = $true }
         } catch { }
 

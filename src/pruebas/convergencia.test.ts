@@ -109,3 +109,24 @@ test('las fuentes que se copian entre si no cuentan como independientes', () => 
   assert.ok(copias.componentes.social < reales.componentes.social,
     'diez canales repitiendo el mismo mensaje son una fuente, no diez');
 });
+
+test('cero fuentes utiles no puede llegar a convergencia', () => {
+  // Habia un suelo de 1 heredado de antes del clasificador que deshacia
+  // su trabajo entero: un token del que solo hablaban promociones
+  // pagadas contaba con una fuente independiente y con eso subia de
+  // nivel. Cero es cero.
+  const v = decidir(R1_BUENO, {
+    fuentesTotal: 5, fuentesIndependientes: 0, anticipacionSeg: 1800,
+    reputacionMedia: 70, afirmacionVerificada: false, tipoSenal: 'llamada',
+  });
+  assert.ok(['descartado', 'amarillo'].includes(v.nivel),
+    `con cero fuentes utiles no puede subir de nivel, y salio ${v.nivel}`);
+});
+
+test('una fuente util si permite seguimiento o convergencia', () => {
+  const v = decidir(R1_BUENO, {
+    fuentesTotal: 5, fuentesIndependientes: 1, anticipacionSeg: 1800,
+    reputacionMedia: 70, afirmacionVerificada: false, tipoSenal: 'llamada',
+  });
+  assert.notEqual(v.nivel, 'descartado');
+});

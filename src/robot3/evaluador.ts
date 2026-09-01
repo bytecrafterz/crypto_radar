@@ -85,7 +85,15 @@ async function reunirSenalSocial(chain: string, address: string): Promise<Entrad
     // Si el clasificador esta puesto, mandan las fuentes que informan.
     // Sin clasificador, clasificacion es NULL y esto vale lo mismo que
     // antes, asi que el sistema se comporta igual que hasta ahora.
-    fuentesIndependientes: Math.max(1, f.fuentes_utiles ?? f.fuentes_indep),
+    //
+    // OJO CON EL SUELO DE 1
+    // Aqui habia un Math.max(1, ...) heredado de cuando no existia el
+    // clasificador, y deshacia su trabajo entero: un token del que solo
+    // hablaban promociones pagadas se guardaba con UNA fuente
+    // independiente en vez de con ninguna, y con eso le bastaba para
+    // llegar a "convergencia". Cero fuentes utiles son cero, y ese token
+    // no tiene que subir de nivel.
+    fuentesIndependientes: f.fuentes_utiles ?? f.fuentes_indep,
     anticipacionSeg: f.anticipacion,
     reputacionMedia: f.reputacion ?? 0,
     // Ahora si se puede afirmar algo: hay al menos un mensaje que el
