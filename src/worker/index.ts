@@ -138,57 +138,63 @@ export async function startWorker(): Promise<void> {
   // --- Robot 2: radar de informacion en Telegram -------------------------
   // Solo arranca si hay token configurado. Sin el, el resto del sistema
   // funciona exactamente igual que antes.
+  // CADA PIEZA ARRANCA POR SU CUENTA
+  //
+  // Antes todo esto colgaba de que el bot respondiera. El bot lee solo los
+  // canales donde alguien lo mete a mano, y ha traido 2 mensajes de 1546:
+  // el trabajo de verdad lo hace la cuenta de usuario por MTProto.
+  //
+  // Aun asi, si el bot fallaba al arrancar no se ponia en marcha NADA del
+  // Robot 2: ni la lectura, ni el descubrimiento, ni el clasificador. Y el
+  // Robot 3 se quedaba sin materia prima. Una pieza que aporta el 0,1% no
+  // puede tumbar al resto, asi que ahora cada una mira solo lo suyo.
+
+  // --- Lectura por bot: solo donde se le haya invitado -------------------
   if (process.env.TELEGRAM_RADAR_TOKEN) {
     const bot = await comprobarBot();
     if (bot.ok) {
-      log.info({ bot: '@' + bot.usuario }, 'Robot 2 activo');
-
-      // Cada 30 s: leer mensajes nuevos y pasarlos por la cadena.
+      log.info({ bot: '@' + bot.usuario }, 'colector por bot activo');
       loop('robot2-colector', () => 30_000, runColector);
-
-      // Cada 30 min: calcular si las menciones se adelantaron al
-      // movimiento. No puede hacerse al recibir el mensaje porque en ese
-      // momento todavia no ha pasado nada que medir.
-      loop('robot2-anticipacion', () => 30 * 60_000, () => actualizarPendientes());
-
-      // Cada 6 h: rehacer la reputacion de cada canal con los resultados
-      // reales acumulados.
-      loop('robot2-reputacion', () => 6 * 60 * 60_000, recalcularReputacion);
-
-      // --- Descubrimiento automatico de canales -------------------------
-      // Solo si hay credenciales de cuenta de usuario: un bot normal no
-      // puede buscar canales ni unirse por su cuenta.
-      //
-      // Cada 2 horas, y con un tope de 3 uniones al dia dentro del propio
-      // modulo. El ritmo importa mas que el volumen: Telegram restringe
-      // las cuentas que se unen deprisa, no las que leen mucho.
-      if (mtprotoListo()) {
-        log.info('descubrimiento automatico de canales activo');
-        loop('robot2-descubrimiento', () => 2 * 60 * 60_000, runDescubrimiento);
-
-        // Lectura de los canales en los que la cuenta ya esta dentro.
-        // Cada canal es una llamada, asi que se leen pocos por vuelta y
-        // se empieza siempre por los que llevan mas tiempo sin mirarse.
-        loop('robot2-lectura', () => 90_000, runColectorMt);
-
-        // Cada hora se comprueba si la cuenta ha entrado en canales
-        // nuevos, para registrarlos como fuentes.
-        loop('robot2-sincronizar', () => 60 * 60_000, sincronizarCanales);
-      } else {
-        log.info('sin credenciales MTProto: el Robot 2 solo lee donde se le invite');
-      }
-
-      // Segunda etapa del triaje. Solo si hay modelo configurado: sin
-      // clave, el sistema se queda exactamente como estaba.
-      if (hayModelo()) {
-        log.info('segunda etapa del triaje activa');
-        loop('robot2-clasificador', () => 3 * 60_000, runClasificador);
-      } else {
-        log.info('sin modelo de lenguaje: el triaje se queda en las reglas gratuitas');
-      }
     } else {
-      log.warn({ error: bot.error }, 'token de Telegram configurado pero el bot no responde');
+      log.warn({ error: bot.error }, 'el bot no responde; se sigue sin el');
     }
+  }
+
+  // --- Descubrimiento y lectura por cuenta de usuario --------------------
+  // Es la via principal. Un bot no puede buscar canales ni unirse solo.
+  //
+  // Cada 2 horas, con un tope de 3 uniones al dia dentro del propio
+  // modulo. El ritmo importa mas que el volumen: Telegram restringe las
+  // cuentas que se unen deprisa, no las que leen mucho.
+  if (mtprotoListo()) {
+    log.info('descubrimiento automatico de canales activo');
+    loop('robot2-descubrimiento', () => 2 * 60 * 60_000, runDescubrimiento);
+
+    // Cada canal es una llamada, asi que se leen pocos por vuelta y se
+    // empieza siempre por los que llevan mas tiempo sin mirarse.
+    loop('robot2-lectura', () => 90_000, runColectorMt);
+
+    // Cada hora se comprueba si la cuenta ha entrado en canales nuevos.
+    loop('robot2-sincronizar', () => 60 * 60_000, sincronizarCanales);
+  } else {
+    log.info('sin credenciales MTProto: el Robot 2 solo lee donde se le invite');
+  }
+
+  // --- Medidas sobre lo ya guardado --------------------------------------
+  // No dependen de como llegara el mensaje, solo de que este en la base de
+  // datos, asi que corren siempre.
+  //
+  // La anticipacion no puede calcularse al recibir el mensaje: en ese
+  // momento todavia no ha pasado nada que medir.
+  loop('robot2-anticipacion', () => 30 * 60_000, () => actualizarPendientes());
+  loop('robot2-reputacion', () => 6 * 60 * 60_000, recalcularReputacion);
+
+  // --- Segunda etapa del triaje ------------------------------------------
+  if (hayModelo()) {
+    log.info('segunda etapa del triaje activa');
+    loop('robot2-clasificador', () => 3 * 60_000, runClasificador);
+  } else {
+    log.info('sin modelo de lenguaje: el triaje se queda en las reglas gratuitas');
   }
 
   // --- Robot 3: convergencia entre los dos radares -----------------------
