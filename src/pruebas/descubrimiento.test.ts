@@ -30,10 +30,15 @@ test('el vocabulario de promocion resta', () => {
     'un titulo que promete 1000x esta vendiendo, no informando');
 });
 
-test('el vocabulario de informacion suma', () => {
+test('suman las palabras de datos concretos, no las de noticias', () => {
+  // Aprendido con datos: los canales de noticias generales publicaron 341
+  // mensajes y no produjeron ni una sola mencion util, porque hablan del
+  // mercado sin nombrar ningun token con su direccion. Lo que sirve son
+  // los que avisan de algo concreto y comprobable.
   const neutro = puntuar('Solana Chat', 10_000);
-  const informativo = puntuar('Solana Research', 10_000);
-  assert.ok(informativo.score > neutro.score);
+  const concreto = puntuar('Solana Whale Alerts', 10_000);
+  assert.ok(concreto.score > neutro.score,
+    'un canal de alertas de ballenas tiene que puntuar por encima');
 });
 
 test('no saber cuantos miembros tiene penaliza, pero no descarta', () => {
@@ -106,11 +111,21 @@ test('un canal de "calls" ya no puntua mejor que uno de analisis', () => {
     'un canal de analisis tiene que puntuar por encima de uno de llamadas');
 });
 
-test('las palabras que suman son las de informar, no las de vender', () => {
+test('las palabras que suman apuntan a tokens concretos', () => {
   const base = puntuar('Solana Chat', 10_000).score;
-  for (const buena of ['Research', 'News', 'Scanner', 'Audit', 'Security', 'Noticias']) {
+  for (const buena of ['Whale', 'Onchain', 'Audit', 'Scanner', 'Tracker', 'Rug', 'Unlock']) {
     assert.ok(puntuar(`Solana ${buena}`, 10_000).score > base,
       `"${buena}" deberia sumar`);
+  }
+});
+
+test('las noticias generales ya no suman puntos', () => {
+  // Este es el fallo que costo 341 mensajes inutiles: 'news' y 'noticias'
+  // premiaban a canales que nunca nombran un token.
+  const base = puntuar('Solana Chat', 10_000).score;
+  for (const generica of ['News', 'Noticias']) {
+    assert.equal(puntuar(`Solana ${generica}`, 10_000).score, base,
+      `"${generica}" no deberia cambiar la nota`);
   }
 });
 

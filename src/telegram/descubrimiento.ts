@@ -40,27 +40,32 @@ const PAUSA_MS = 4000;
  * Se rota entre ellas: repetir la misma no aporta resultados nuevos.
  */
 const CONSULTAS = [
-  // LO QUE SE BUSCA AHORA Y POR QUE CAMBIO
-  // Antes se buscaban solo canales de "calls": alpha calls, degen calls,
-  // memecoin gems. Con el clasificador funcionando se vio el resultado en
-  // los numeros: de veintiuna menciones recogidas, diecinueve eran
-  // promocion pagada y una sola era informacion. Estabamos buscando justo
-  // los canales que venden.
+  // LO QUE SE BUSCA, CORREGIDO DOS VECES CON DATOS DELANTE
   //
-  // El Robot 3 necesita fuentes que informen, porque una promocion no
-  // cuenta como fuente independiente. Asi que ahora se busca sobre todo
-  // informacion, y se dejan unas pocas consultas de "calls" porque esos
-  // canales si llegan pronto y la anticipacion dira cuales valen.
-  'crypto news', 'onchain analysis', 'whale alerts', 'token unlocks',
-  'defi research', 'rug pull alerts', 'crypto security', 'token audit',
-  'solana news', 'base chain news', 'crypto research',
+  // Primero se buscaban solo canales de "calls" y salio que de veintiuna
+  // menciones, diecinueve eran promocion pagada. Se cambio a buscar
+  // informacion y se fue al extremo contrario: entraron canales de
+  // noticias generales que publicaron 341 mensajes y produjeron CERO
+  // menciones, porque hablan de Bitcoin y del mercado sin nombrar nunca
+  // un token concreto con su direccion.
+  //
+  // Lo que de verdad hace falta es lo de en medio: canales que hablen de
+  // TOKENS CONCRETOS pero informando en vez de vendiendo. Alertas de
+  // ballenas, avisos de estafa, desbloqueos, auditorias. Esos si traen
+  // direcciones y no son publicidad.
+  //
+  // Se dejan tambien consultas de "calls" porque, con todo lo promocional
+  // que son, hoy son los unicos que producen menciones.
+  'whale alerts', 'token unlocks', 'rug pull alerts', 'token audit',
+  'onchain analysis', 'new token listings', 'solana new tokens',
+  'liquidity locked', 'contract renounced', 'scam token alerts',
   // Espanol
-  'noticias cripto', 'analisis cripto', 'alertas ballenas',
-  'seguridad cripto', 'estafas cripto',
+  'alertas ballenas', 'estafas cripto', 'nuevos tokens solana',
+  'tokens nuevos cripto',
   // Portugues
-  'noticias cripto brasil', 'analise cripto', 'seguranca cripto',
-  // Un resto de canales de llamadas, que llegan pronto aunque vendan.
-  'solana calls', 'early calls',
+  'alertas baleias', 'golpes cripto', 'novos tokens cripto',
+  // Canales de llamadas: venden, pero son los que citan tokens.
+  'solana calls', 'early calls', 'memecoin calls',
 ];
 
 /** Enlaces a otros canales dentro de un texto. */
@@ -119,9 +124,13 @@ export function puntuar(
   // 'alpha' estaba aqui y era un error: los canales que se llaman
   // "alpha calls" resultaron ser los mas promocionales de todos. Premiarlo
   // era premiar lo contrario de lo que se busca.
+  // 'news' y 'noticias' estaban aqui y fue un error: atraian canales de
+  // noticias generales que hablan del mercado sin nombrar ningun token.
+  // 341 mensajes suyos y ni una sola mencion aprovechable.
   const bueno = [
-    'research', 'insider', 'scanner', 'radar', 'tracker', 'news',
-    'analysis', 'analisis', 'noticias', 'audit', 'auditoria', 'security',
+    'whale', 'ballena', 'baleia', 'scanner', 'radar', 'tracker',
+    'onchain', 'on-chain', 'audit', 'auditoria', 'unlock', 'alert',
+    'insider', 'scam', 'rug', 'estafa',
   ];
   const bien = bueno.find((p) => t.includes(p));
   if (bien) {
