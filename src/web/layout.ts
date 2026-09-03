@@ -241,8 +241,20 @@ export function page(opts: PageOptions, body: string): string {
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
+<!--
+  Para que en el iPhone se pueda anadir a la pantalla de inicio y se
+  comporte como una aplicacion: sin la barra de Safari, con su icono y su
+  nombre. No se instala nada, sigue siendo la misma pagina, pero se abre
+  a pantalla completa y se usa igual que una app.
+-->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Crypto Radar">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0e1117">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' fill='%230e1117'/><circle cx='90' cy='90' r='66' fill='none' stroke='%23e6edf3' stroke-width='9'/><path d='M90 90 L90 24 A66 66 0 0 1 136.7 43.3 Z' fill='%2358a6ff' opacity='.55'/><line x1='90' y1='90' x2='136.7' y2='43.3' stroke='%2358a6ff' stroke-width='9' stroke-linecap='round'/><circle cx='120' cy='45' r='11' fill='%2358a6ff'/><circle cx='90' cy='90' r='9' fill='%23e6edf3'/></svg>">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='11' fill='%230e1117'/><circle cx='12' cy='12' r='9.2' fill='none' stroke='%23e6edf3' stroke-width='1.8'/><path d='M12 12 L12 4.2 A7.8 7.8 0 0 1 18.7 8 Z' fill='%2358a6ff' opacity='.55'/><line x1='12' y1='12' x2='18.7' y2='8' stroke='%2358a6ff' stroke-width='1.6' stroke-linecap='round'/><circle cx='15.6' cy='7.8' r='1.5' fill='%2358a6ff'/><circle cx='12' cy='12' r='1.2' fill='%23e6edf3'/></svg>">
 <title>${escapeHtml(opts.title)} · Crypto Radar</title>
 <style>${CSS}</style>
