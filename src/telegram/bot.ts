@@ -20,6 +20,46 @@ const log = child('telegram-bot');
 
 const CLAVE_OFFSET = 'telegram_bot_offset';
 
+/** Donde se guardan las conversaciones privadas que han escrito al bot. */
+const CLAVE_PRIVADAS = 'telegram_conversaciones_privadas';
+
+interface ConversacionPrivada {
+  id: number;
+  nombre: string;
+  visto: string;
+}
+
+/**
+ * Apunta a quien escribe al bot en privado.
+ *
+ * Sirve para una cosa concreta: poder mandarle los avisos. Telegram no
+ * deja escribir a alguien que no te haya escrito primero, y su
+ * identificador de conversacion solo aparece cuando lo hace. Guardarlo
+ * evita tener que pedirle que escriba otra vez.
+ */
+async function apuntarConversacionPrivada(chat: ChatTelegram): Promise<void> {
+  try {
+    const previas = await getState<ConversacionPrivada[]>(CLAVE_PRIVADAS, []);
+    if (previas.some((c) => c.id === chat.id)) return;
+
+    const nombre = chat.username ? '@' + chat.username : (chat.title ?? 'sin nombre');
+    const lista = [...previas, { id: chat.id, nombre, visto: new Date().toISOString() }];
+
+    await setState(CLAVE_PRIVADAS, lista.slice(-20));
+    log.info(
+      { chat_id: chat.id, quien: nombre },
+      'alguien ha escrito al bot; su conversacion queda apuntada para poder enviarle avisos',
+    );
+  } catch {
+    // Que falle apuntarlo no puede parar la lectura de canales.
+  }
+}
+
+/** Las conversaciones privadas conocidas, para elegir destino de avisos. */
+export async function conversacionesPrivadas(): Promise<ConversacionPrivada[]> {
+  return getState<ConversacionPrivada[]>(CLAVE_PRIVADAS, []);
+}
+
 export interface ChatTelegram {
   id: number;
   type: string;
@@ -114,7 +154,18 @@ export async function recogerMensajes(limite = 100): Promise<MensajeTelegram[]> 
 
     // Los mensajes privados al bot no son fuentes de informacion: son
     // gente escribiendole. No entran en el radar.
-    if (chat.type === 'private') continue;
+    //
+    // PERO SE APUNTA QUIEN ESCRIBE, y esto importa. Para mandarle los
+    // avisos a alguien por Telegram hace falta el identificador de su
+    // conversacion, y la unica forma de conocerlo es que esa persona
+    // escriba al bot. Antes ese mensaje se descartaba aqui y el offset
+    // avanzaba igual, asi que el identificador se perdia para siempre y
+    // no habia manera de recuperarlo salvo pidiendo que escribiera otra
+    // vez.
+    if (chat.type === 'private') {
+      await apuntarConversacionPrivada(chat);
+      continue;
+    }
 
     mensajes.push({
       chat,
