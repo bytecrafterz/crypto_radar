@@ -55,3 +55,6 @@ entrega/
 
 # Claves SSH del servidor: nunca al repositorio.
 claves/
+
+# Volcados de la base de datos: pesan cientos de MB.
+respaldos/bd/
