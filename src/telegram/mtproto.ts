@@ -98,6 +98,12 @@ export async function conectar(): Promise<TelegramClient | null> {
       baseLogger: {
         log: () => {}, info: () => {}, warn: () => {},
         error: () => {}, debug: () => {},
+        // La libreria llama por dentro a estos dos, y solo cuando algo va
+        // mal. Si no estan, el propio manejador del error revienta con
+        // "canSend is not a function", y entonces un corte pasajero de red
+        // se convierte en una conexion que ya no vuelve a levantarse.
+        canSend: () => false,
+        setLevel: () => {},
       } as never,
     },
   );
