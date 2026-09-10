@@ -68,8 +68,30 @@ const CONSULTAS = [
   'solana calls', 'early calls', 'memecoin calls',
 ];
 
-/** Enlaces a otros canales dentro de un texto. */
-const RE_ENLACE = /(?:https?:\/\/)?t\.me\/(?:joinchat\/)?([A-Za-z][A-Za-z0-9_]{3,31})/g;
+/**
+ * Enlaces a otros canales dentro de un texto.
+ *
+ * Coge SOLO el primer tramo despues de t.me/ y no se traga ningun prefijo.
+ * Antes la expresion se comia "joinchat/" y capturaba lo de detras, que es el
+ * codigo de la invitacion y no un canal: se gastaba una llamada en resolver
+ * un nombre que no existe. Y el filtro de mas abajo no podia darse cuenta,
+ * porque para cuando miraba la palabra "joinchat" ya no estaba.
+ *
+ * Los enlaces t.me/+CODIGO se quedan fuera solos: el primer caracter tiene
+ * que ser una letra.
+ */
+const RE_ENLACE = /(?:https?:\/\/)?t\.me\/([A-Za-z][A-Za-z0-9_]{3,31})/g;
+
+/**
+ * Tramos que ocupan el sitio del nombre de usuario sin serlo.
+ *
+ * joinchat y addlist son invitaciones y carpetas: lo que llevan detras es un
+ * codigo. Resolverlos devuelve USERNAME_INVALID, y cada intento gasta una de
+ * las pocas llamadas a Telegram que este sistema se permite por vuelta.
+ */
+const TRAMOS_NO_USUARIO = new Set([
+  'joinchat', 'addlist', 'proxy', 'socks', 'share', 'iv', 'setlanguage', 'addstickers',
+]);
 
 /**
  * Puntua un canal SIN entrar en el, solo con lo que se ve de fuera.
@@ -243,7 +265,7 @@ export async function extraerDeMensajes(limite = 200): Promise<number> {
       const u = enc[1];
       // Los enlaces de invitacion privada no sirven: no se pueden mirar
       // desde fuera ni entrar por username.
-      if (u.length < 5 || u.startsWith('joinchat')) continue;
+      if (u.length < 5 || TRAMOS_NO_USUARIO.has(u.toLowerCase())) continue;
       vistos.add(u);
     }
   }
