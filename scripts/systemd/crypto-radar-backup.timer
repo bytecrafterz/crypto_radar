@@ -1,0 +1,21 @@
+# /etc/systemd/system/crypto-radar-backup.timer
+# ---------------------------------------------------------------------------
+# Las 03:30 son la hora que ya traia la tarea de Windows. Se mantiene para que
+# la serie de volcados siga siendo continua y comparable.
+#
+# Persistent=true es la diferencia importante frente a la tarea de Windows: si
+# el servidor esta apagado o reiniciandose a las 03:30, la copia se hace en
+# cuanto vuelve, en lugar de perderse ese dia sin que nadie se entere.
+# ---------------------------------------------------------------------------
+
+[Unit]
+Description=Crypto Radar - copia de seguridad diaria de la base de datos
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+# Reparte el arranque para no chocar con las otras tareas nocturnas.
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
