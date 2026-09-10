@@ -58,3 +58,7 @@ claves/
 
 # Volcados de la base de datos: pesan cientos de MB.
 respaldos/bd/
+
+# Paquete de revision independiente: 67 MB de evidencia generada
+# (el universo de 356.408 filas). Se regenera, como entrega/.
+revision/
