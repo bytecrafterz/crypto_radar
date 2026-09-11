@@ -30,7 +30,7 @@ const NOMBRE_VIDEO = GRUPO === 'r12' ? 'recorrido-robots-1-y-2' : GRUPO === 'r3'
 const browser = await chromium.launch();
 async function sesion(viewport, etiqueta, video) {
   const ctx = await browser.newContext({
-    viewport, deviceScaleFactor: 2,
+    viewport, deviceScaleFactor: 1.5,
     ...(video ? { recordVideo: { dir: OUT, size: viewport } } : {}),
     ...(etiqueta === 'movil' ? { isMobile: true, hasTouch: true } : {}),
   });
