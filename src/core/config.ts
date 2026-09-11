@@ -156,6 +156,22 @@ export const getScoring = (): ScoringConfig => load<ScoringConfig>('scoring.yaml
 export const getKnownAddresses = (): KnownAddressesConfig =>
   load<KnownAddressesConfig>('known-addresses.yaml');
 
+/** Umbrales del Robot 3. Ver config/robot3.yaml para el porque de cada numero. */
+export interface Robot3Config {
+  nivel_maximo: {
+    tecnica_minima: number;
+    riesgo_maximo: number;
+    fuentes_independientes_minimas: number;
+    reputacion_minima: number;
+  };
+  nivel_intermedio: {
+    tecnica_minima: number;
+    riesgo_maximo: number;
+  };
+  avisos_por_dia: number;
+}
+export const getRobot3 = (): Robot3Config => load<Robot3Config>('robot3.yaml');
+
 /** Conjunto de direcciones que NO cuentan como holder real, en minusculas. */
 export function nonHolderAddresses(chain: string): Set<string> {
   const known = getKnownAddresses();
@@ -215,6 +231,29 @@ export function validateConfig(): string[] {
     getKnownAddresses();
   } catch (err) {
     problems.push(`known-addresses.yaml no se pudo leer: ${(err as Error).message}`);
+  }
+  try {
+    const r = getRobot3();
+    const max = r.nivel_maximo, med = r.nivel_intermedio;
+    if (!max || !med) problems.push('robot3.yaml: faltan las secciones nivel_maximo/nivel_intermedio.');
+    else {
+      if (max.tecnica_minima < med.tecnica_minima) {
+        problems.push('robot3.yaml: el nivel maximo no puede exigir menos nota tecnica que el intermedio.');
+      }
+      if (max.fuentes_independientes_minimas < 2) {
+        // Con una sola fuente no hay convergencia: es la promesa que protege
+        // la prueba "una sola fuente no es convergencia".
+        problems.push('robot3.yaml: fuentes_independientes_minimas debe ser al menos 2.');
+      }
+      // Aviso, no error: un liston que ningun token real alcanza deja el
+      // Robot 3 mudo sin que nadie lo note. 60,1 es la nota mas alta vista
+      // en 9.552 resultados reales (paquete de revision del 06/09/2026).
+      if (max.tecnica_minima > 60) {
+        problems.push('robot3.yaml: tecnica_minima por encima de 60 esta por encima de la nota mas alta que el Robot 1 ha dado nunca; el aviso no podra dispararse.');
+      }
+    }
+  } catch (err) {
+    problems.push(`robot3.yaml no se pudo leer: ${(err as Error).message}`);
   }
   return problems;
 }

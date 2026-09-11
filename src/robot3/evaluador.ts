@@ -18,18 +18,18 @@ import { query, queryOne, exec } from '../core/db.js';
 import { child } from '../core/logger.js';
 import { notify } from '../worker/notify.js';
 import { decidir, type EntradaRobot1, type EntradaRobot2 } from './convergencia.js';
+import { umbralesActuales, avisosPorDia } from './umbrales.js';
 import type { Chain } from '../core/types.js';
 
 const log = child('robot3');
 
 /**
- * Tope de avisos de convergencia al dia.
+ * Tope de avisos de convergencia al dia: config/robot3.yaml, avisos_por_dia.
  *
  * Muy bajo a proposito. Estos avisos son los de maxima prioridad: si
  * llegan varios al dia dejan de significar nada. La especificacion pedia
  * "pocas oportunidades y extremadamente filtradas".
  */
-const MAX_AVISOS_DIA = 3;
 
 interface DatosMencion {
   chain: Chain;
@@ -221,7 +221,9 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
     [chain, address],
   );
 
-  const veredicto = decidir(r1, r2);
+  // Los umbrales salen de config/robot3.yaml y se recargan solos: cambiar
+  // un numero ahi no exige reiniciar ni tocar codigo.
+  const veredicto = decidir(r1, r2, umbralesActuales());
 
   // Se guarda SIEMPRE, avise o no. Los descartados son justamente lo que
   // hace falta para comprobar mas adelante si el sistema acertaba.
@@ -268,7 +270,7 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
     if ((yaEnviado?.n ?? 0) > 0) return;
   }
 
-  if ((await avisosHoy()) >= MAX_AVISOS_DIA) {
+  if ((await avisosHoy()) >= avisosPorDia()) {
     log.info({ token: t?.symbol }, 'tope diario de avisos de convergencia alcanzado');
     return;
   }

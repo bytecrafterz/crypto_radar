@@ -17,6 +17,7 @@
     "web": "tsx src/web/server.ts",
     "selftest": "tsx src/selftest.ts",
     "test:alertas": "tsx src/testAlert.ts",
+    "robot3:calibracion": "tsx scripts/robot3-calibracion.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test \"src/pruebas/**/*.test.ts\""
   },

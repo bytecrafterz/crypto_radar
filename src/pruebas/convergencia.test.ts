@@ -130,3 +130,26 @@ test('una fuente util si permite seguimiento o convergencia', () => {
   });
   assert.notEqual(v.nivel, 'descartado');
 });
+
+test('el nivel maximo es alcanzable con la mejor nota que el Robot 1 da en la practica', () => {
+  // 60,1 es la nota mas alta vista en 9.552 resultados reales. Si con esa
+  // nota y una senal social fuerte no se llega al nivel maximo, el aviso no
+  // puede dispararse nunca y el Robot 3 esta mudo sin que nadie lo sepa.
+  const techoReal: EntradaRobot1 = { ...R1_BUENO, opportunity: 60, risk: 30 };
+  const v = decidir(techoReal, R2_FUERTE);
+  assert.equal(v.nivel, 'rojo',
+    `con la nota mas alta real y senal fuerte deberia ser rojo, y salio ${v.nivel}`);
+});
+
+test('los umbrales que se pasan mandan sobre los de por defecto', () => {
+  const exigente = decidir(R1_BUENO, R2_FUERTE, {
+    tecnicaMinimaRojo: 90, riesgoMaximoRojo: 10, fuentesIndepMinimasRojo: 2,
+    reputacionMinimaRojo: 50, tecnicaMinimaNaranja: 45, riesgoMaximoNaranja: 60,
+  });
+  assert.notEqual(exigente.nivel, 'rojo', 'con un liston de 90 el mismo token no debe ser rojo');
+  const laxo = decidir({ ...R1_BUENO, opportunity: 50 }, R2_FUERTE, {
+    tecnicaMinimaRojo: 45, riesgoMaximoRojo: 40, fuentesIndepMinimasRojo: 2,
+    reputacionMinimaRojo: 50, tecnicaMinimaNaranja: 40, riesgoMaximoNaranja: 60,
+  });
+  assert.equal(laxo.nivel, 'rojo', 'bajando el liston a 45 una nota de 50 si llega');
+});

@@ -78,11 +78,18 @@ export interface Umbrales {
 export const UMBRALES_POR_DEFECTO: Umbrales = {
   // Deliberadamente exigentes. La especificacion pide pocas alertas y muy
   // filtradas: "prefiero 1 senal fuerte antes que 20 debiles".
-  tecnicaMinimaRojo: 70,
+  //
+  // Los valores de produccion viven en config/robot3.yaml; estos son el
+  // respaldo si el fichero faltara, y son los mismos. Antes el nivel maximo
+  // pedia una nota tecnica de 70, pero en 9.552 resultados reales la nota
+  // mas alta que el Robot 1 ha dado nunca es 60,1: el liston estaba por
+  // encima de lo alcanzable y el aviso no podia dispararse. 55 es la franja
+  // donde los datos ya demuestran el mejor comportamiento (5,6 % de rugs).
+  tecnicaMinimaRojo: 55,
   riesgoMaximoRojo: 40,
   fuentesIndepMinimasRojo: 2,
   reputacionMinimaRojo: 50,
-  tecnicaMinimaNaranja: 55,
+  tecnicaMinimaNaranja: 45,
   riesgoMaximoNaranja: 60,
 };
 

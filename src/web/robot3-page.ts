@@ -12,6 +12,7 @@
  * que poder distinguirlo de un token mediocre del que nadie habla.
  */
 import { query, queryOne } from '../core/db.js';
+import { umbralesActuales } from '../robot3/umbrales.js';
 import { page } from './layout.js';
 import { escapeHtml } from '../core/util.js';
 
@@ -164,6 +165,13 @@ export async function renderRobot3(): Promise<string> {
          y aqui se ve separado para que se entienda por que.
          <b>El veto del Robot 1 manda siempre</b>: si el token no se puede
          vender, da igual cuanta gente hable de el.
+       </p>
+       <p class="small" style="color:var(--muted);margin:8px 0 0">
+         ${(() => { const u = umbralesActuales(); return `Para <b>Convergencia fuerte</b>, el unico nivel que avisa, hacen falta a la vez:
+         oportunidad &ge; <b>${u.tecnicaMinimaRojo}</b>, riesgo &le; <b>${u.riesgoMaximoRojo}</b>,
+         al menos <b>${u.fuentesIndepMinimasRojo}</b> fuentes que no se copien entre si con reputacion &ge; <b>${u.reputacionMinimaRojo}</b>,
+         y que hablaran antes de que el precio se moviera. Para <b>Convergencia</b>: oportunidad &ge; <b>${u.tecnicaMinimaNaranja}</b>,
+         riesgo &le; <b>${u.riesgoMaximoNaranja}</b> y una fuente. Se ajustan en config/robot3.yaml.`; })()}
        </p>
        <p class="small" style="color:var(--muted);margin:8px 0 0">
          Evaluados hasta ahora: <b>${tot.evaluados}</b> ·

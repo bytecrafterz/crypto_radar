@@ -1,0 +1,44 @@
+# ============================================================================
+#  Robot 3 · umbrales de convergencia
+#
+#  Aqui se decide cuando dos lecturas del mismo token (la de la cadena, del
+#  Robot 1, y la de Telegram, del Robot 2) merecen un aviso. Se recarga solo
+#  al cabo de un minuto de guardarlo: no hace falta reiniciar.
+#
+#  LO QUE NO SE PUEDE TOCAR DESDE AQUI
+#  El veto del Robot 1 gana siempre. Un token que no se puede vender no es
+#  una oportunidad por mucho que hable Telegram. Eso va cableado en el codigo
+#  y no es un umbral.
+#
+#  POR QUE ESTOS NUMEROS
+#  Los umbrales originales exigian una nota tecnica de 70 para el nivel
+#  maximo. Revisando los 9.552 resultados reales medidos hasta el 06/09/2026,
+#  la nota mas alta que el Robot 1 ha dado nunca es 60,1: el liston estaba por
+#  encima de lo que el Robot 1 llega a puntuar en la practica, asi que el
+#  aviso no podia dispararse. La logica era correcta; el numero no.
+#
+#  Se recalibran con los mismos datos:
+#    - nota 55 o mas:   18 casos,  5,6 % acabaron en rug, pico mediano 2,61x
+#    - nota 40 a 54:  2.239 casos, 15,0 % en rug,          pico mediano 2,33x
+#    - nota menor 40: 6.913 casos, 59,8 % en rug,          pico mediano 1,44x
+#  El nivel maximo se situa en la franja de 55, que es donde los datos ya
+#  demuestran el mejor comportamiento. El nivel intermedio baja a 45 para que
+#  siga habiendo distancia entre los dos.
+#
+#  Lo que sigue siendo exigente, a proposito, porque es lo que hace que sea
+#  "convergencia" y no ruido: hacen falta al menos DOS fuentes que no se
+#  copien entre si, con reputacion, y que hablaran ANTES de que el precio se
+#  moviera. El encargo pedia pocas senales y muy filtradas.
+# ============================================================================
+
+nivel_maximo:            # "Convergencia fuerte": el unico nivel que envia aviso
+  tecnica_minima: 55     # nota de oportunidad del Robot 1 (0-100)
+  riesgo_maximo: 40      # nota de riesgo del Robot 1 (0-100)
+  fuentes_independientes_minimas: 2   # canales que NO son copia unos de otros
+  reputacion_minima: 50  # reputacion media de esas fuentes (0-100)
+
+nivel_intermedio:        # "Convergencia": interes alto con reservas, no avisa
+  tecnica_minima: 45
+  riesgo_maximo: 60
+
+avisos_por_dia: 3        # tope de avisos de maxima prioridad al dia

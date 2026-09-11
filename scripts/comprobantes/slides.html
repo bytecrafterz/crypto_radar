@@ -1,0 +1,14 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><style>
+html,body{margin:0;height:100%;background:#0d0d0d;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
+.s{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;opacity:0;transition:opacity .6s}
+.s.on{opacity:1}.s img{max-width:92vw;max-height:80vh;box-shadow:0 12px 40px rgba(0,0,0,.6);border-radius:6px;background:#fff}
+.cap{color:#fff;font-size:22px;margin-top:22px;font-weight:600}.sub{color:#c3c2b7;font-size:15px;margin-top:6px}
+.title{color:#fff;text-align:center}.title h1{font-size:44px;margin:0 0 10px;font-weight:650}.title p{font-size:20px;color:#c3c2b7;margin:0}
+</style></head><body>
+<div class="s title on"><div class="title"><h1>Crypto Radar</h1><p>Comprobantes de entrega · Robots 1, 2 y 3 · sistema en producción</p><p style="margin-top:16px;font-size:16px">https://crypto-radar.duckdns.org</p></div></div>
+<script>
+const S=JSON.parse(document.currentScript.dataset.slides||'[]');
+for(const [src,cap,sub] of S){const d=document.createElement('div');d.className='s';d.innerHTML=`<img src="${src}"><div class="cap">${cap}</div><div class="sub">${sub||''}</div>`;document.body.append(d)}
+const all=[...document.querySelectorAll('.s')];let i=0;
+setInterval(()=>{all[i].classList.remove('on');i=(i+1)%all.length;all[i].classList.add('on')},3400);
+</script></body></html>
