@@ -14,6 +14,7 @@
 # ============================================================================
 set -euo pipefail
 
+MODO="${1:-todo}"     # "todo" (por defecto) o "capturas" para repetir solo los pasos 5 y 6
 ORIGEN=/home/tommy/apps/Blockchain
 DESTINO=/opt/crypto-radar
 E12=$ORIGEN/entrega/Entrega-Robots-1-y-2
@@ -26,6 +27,7 @@ ok()   { printf '\033[1;32m  OK  %s\033[0m\n' "$*"; }
 mal()  { printf '\033[1;31m  X   %s\033[0m\n' "$*"; }
 [[ $EUID -eq 0 ]] || { mal "hay que ejecutarlo con sudo"; exit 1; }
 
+if [[ "$MODO" == "todo" ]]; then
 azul "1/6  Llevando el ultimo commit al servidor"
 $G fetch -q "$ORIGEN" main
 $G reset -q --hard FETCH_HEAD
@@ -51,12 +53,16 @@ sudo -u radar env HOME=/var/lib/radar bash -c "cd $DESTINO && set -a && . ./.env
 sudo -u radar bash -c "set -a; . $DESTINO/.env; set +a; psql \"\$DATABASE_URL\" -c \"\\copy (SELECT c.chain, c.address, t.symbol, c.primera_mencion, c.nivel, c.fuentes_total, c.fuentes_indep, c.anticipacion_seg, c.score_tecnica, c.score_riesgo, c.score_social, c.score_fuentes, c.score_evidencia, c.vetado, c.enviado_at FROM tg_candidatos c LEFT JOIN tokens t ON t.chain=c.chain AND t.address=c.address WHERE c.nivel IS NOT NULL ORDER BY c.primera_mencion DESC) TO STDOUT CSV HEADER\"" > "$E3/veredictos-robot-3.csv" 2>/dev/null || true
 cp "$ORIGEN/config/robot3.yaml" "$E3/config-robot3.yaml"
 echo "  veredictos exportados: $(( $(wc -l < "$E3/veredictos-robot-3.csv") - 1 ))"
-sed -n '1,12p' "$E3/calibracion-robot-3.txt" | sed 's/^/  /'
+sed 's/^/  /' "$E3/calibracion-robot-3.txt"
 ok "calibracion en $E3/calibracion-robot-3.txt"
+fi
 
 azul "5/6  Capturas y videos por grupo (esto tarda unos 3 minutos)"
 PASS="$(grep '^PANEL_PASSWORD=' "$DESTINO/.env" | cut -d= -f2-)"
 mkdir -p "$E12/capturas" "$E3/capturas"
+# Las capturas las hace tommy (playwright vive en su cuenta): las carpetas
+# tienen que ser suyas antes, no despues. Root las creo, y root no es tommy.
+chown -R tommy:tommy "$E12" "$E3"
 sudo -u tommy env PANEL_PASSWORD="$PASS" HOME=/home/tommy node "$ORIGEN/scripts/comprobantes/capturar.mjs" "$E12/capturas" r12 | sed 's/^/  /'
 sudo -u tommy env PANEL_PASSWORD="$PASS" HOME=/home/tommy node "$ORIGEN/scripts/comprobantes/capturar.mjs" "$E3/capturas" r3 | sed 's/^/  /'
 unset PASS
