@@ -5,9 +5,26 @@
 //   sin grupo    -> todas las paginas
 // Sin PANEL_PASSWORD solo captura la pantalla de entrada (publica).
 import { createRequire } from 'node:module';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, globSync } from 'node:fs';
 const require = createRequire(import.meta.url);
-const { chromium } = require('/home/tommy/apps/Santtify/node_modules/playwright');
+// Playwright no es una dependencia del proyecto: solo hace falta para sacar
+// estas capturas, y no tiene por que viajar en la entrega. Se busca alla
+// donde este instalado en la maquina, y si no aparece se dice como ponerlo,
+// en vez de fallar con un error de modulo que no explica nada.
+const CANDIDATOS = [
+  'playwright',
+  '/home/tommy/apps/my portfolio/node_modules/playwright',
+  '/home/tommy/apps/Santtify/node_modules/playwright',
+  '/usr/lib/node_modules/playwright',
+];
+let chromium = null;
+for (const ruta of CANDIDATOS) {
+  try { ({ chromium } = require(ruta)); break; } catch { /* se prueba el siguiente */ }
+}
+if (!chromium) {
+  console.error('No encuentro playwright. Instalalo con:  npm i -g playwright && npx playwright install chromium');
+  process.exit(1);
+}
 
 const BASE = 'http://127.0.0.1:3000';
 const OUT = process.argv[2] || '.';
@@ -27,7 +44,20 @@ const TODAS = [
 const PAGINAS = GRUPO ? TODAS.filter((p) => p[2] === GRUPO) : TODAS;
 const NOMBRE_VIDEO = GRUPO === 'r12' ? 'recorrido-robots-1-y-2' : GRUPO === 'r3' ? 'recorrido-robot-3' : 'recorrido-panel';
 
-const browser = await chromium.launch();
+// La version de playwright instalada y los navegadores descargados no
+// siempre coinciden de numero. Si el que espera no esta, se usa el que si
+// hay en la cache, en vez de pedir una descarga de 150 MB que aqui no hace
+// falta.
+function navegadorInstalado() {
+  const cache = `${process.env.HOME}/.cache/ms-playwright`;
+  for (const patron of ['chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell',
+                        'chromium-*/chrome-linux/chrome']) {
+    const encontrados = globSync(`${cache}/${patron}`);
+    if (encontrados.length) return encontrados.sort().at(-1);
+  }
+  return undefined;
+}
+const browser = await chromium.launch({ executablePath: navegadorInstalado() });
 async function sesion(viewport, etiqueta, video) {
   const ctx = await browser.newContext({
     viewport, deviceScaleFactor: 1.5,
@@ -41,7 +71,12 @@ async function sesion(viewport, etiqueta, video) {
     await page.fill('input[name="password"]', PASS);
     await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle' }), page.keyboard.press('Enter')]);
     for (const [ruta, nombre] of PAGINAS) {
-      await page.goto(BASE + ruta, { waitUntil: 'networkidle' });
+      // 'domcontentloaded' y no 'networkidle': la pagina de Telegram mide
+      // veinte mil pixeles y nunca llega a quedarse quieta del todo, asi que
+      // esperar al silencio de red acababa siempre en timeout. Se espera a
+      // que el HTML este y luego se da un margen fijo para que pinte.
+      await page.goto(BASE + ruta, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+      await page.waitForTimeout(1200);
       // En el video se deja tiempo para leer y se baja despacio por la pagina.
       if (video) { await page.waitForTimeout(1500); await page.evaluate(async () => { for (let y = 0; y < Math.min(document.body.scrollHeight, 6000); y += 300) { window.scrollTo(0, y); await new Promise((r) => setTimeout(r, 120)); } window.scrollTo(0, 0); }); await page.waitForTimeout(800); }
       else await page.waitForTimeout(400);
