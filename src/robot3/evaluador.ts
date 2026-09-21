@@ -64,8 +64,17 @@ async function reunirSenalSocial(chain: string, address: string): Promise<Entrad
             -- mucho que venga de otro canal: es el mismo interes pagando
             -- dos veces, y contarla como tal es justo lo que dispara una
             -- alerta en falso.
+            --
+            -- 'indeterminado' cuenta como no clasificado, no como publicidad.
+            -- Es lo que se guarda cuando el modelo no contesta en varios
+            -- intentos, y eso pasa por una caida del proveedor, no por algo
+            -- que diga el mensaje. Excluirlo hacia que una caida ajena fuera
+            -- bajando las fuentes del Robot 3 en silencio: cuanto mas durara
+            -- la caida, menos podia converger, sin que nada lo avisara.
             COUNT(DISTINCT m.text_hash) FILTER (
-              WHERE m.clasificacion IS NULL OR m.clasificacion = 'informacion'
+              WHERE m.clasificacion IS NULL
+                 OR m.clasificacion = 'indeterminado'
+                 OR m.clasificacion = 'informacion'
             )::int                                                    AS fuentes_utiles,
             COUNT(*) FILTER (WHERE m.clasificacion = 'informacion')::int AS con_informacion,
             AVG(me.anticipacion_seg)::int                             AS anticipacion,
