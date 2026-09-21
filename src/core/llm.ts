@@ -13,7 +13,7 @@
  *
  * Se soportan tres formas de API, que cubren practicamente todo:
  *
- *   anthropic  Claude
+ *   anthropic  API de Anthropic
  *   gemini     Google
  *   openai     Groq, OpenRouter, Ollama y cualquiera compatible, que a
  *              dia de hoy son casi todos, incluido un modelo corriendo en
@@ -56,10 +56,19 @@ export function configLlm(): ConfigLlm | null {
     return null;
   }
 
+  const modelo = process.env.LLM_MODEL ?? '';
+  // Anthropic no lleva modelo por defecto: hay que decir cual. Sin esto la
+  // llamada saldria con el modelo vacio y el error que devuelve el
+  // proveedor no deja claro que lo que falta es una variable de entorno.
+  if (proveedor === 'anthropic' && !modelo) {
+    log.warn('falta LLM_MODEL para el proveedor anthropic; no se usara');
+    return null;
+  }
+
   return {
     proveedor,
     clave,
-    modelo: process.env.LLM_MODEL ?? '',
+    modelo,
     base: process.env.LLM_BASE_URL ?? BASE_POR_DEFECTO[proveedor],
   };
 }
@@ -100,7 +109,10 @@ export async function preguntar(
             'content-type': 'application/json',
           },
           body: {
-            model: c.modelo || 'claude-haiku-4-5-20251001',
+            // El modelo se indica siempre en LLM_MODEL: cada proveedor
+            // cambia los suyos cada pocos meses y un nombre escrito aqui
+            // envejece mal.
+            model: c.modelo,
             max_tokens: maxTokens,
             system: instruccion,
             messages: [{ role: 'user', content: texto }],
