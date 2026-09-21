@@ -79,19 +79,38 @@ export async function renderTelegram(): Promise<string> {
     )) ?? { canales: 0, mensajes: 0, descartados: 0, candidatos: 0, menciones: 0, tokens: 0 };
 
   const fuentes = await query<FilaFuente>(
-    `SELECT c.title, c.username,
-            COUNT(DISTINCT m.id)::int                                          AS mensajes,
-            COUNT(DISTINCT me.id)::int                                         AS menciones,
-            COUNT(*) FILTER (WHERE me.es_primera)::int                         AS primeras,
-            COUNT(*) FILTER (WHERE me.anticipacion_seg > 0)::int               AS adelantadas,
-            COUNT(*) FILTER (WHERE me.anticipacion_veredicto IS NOT NULL
-                               AND me.anticipacion_veredicto <> 'sin_datos')::int AS medibles,
-            AVG(me.anticipacion_seg) FILTER (WHERE me.anticipacion_seg <> 0)::int AS anticipacion_med
+    // Cada tabla se cuenta POR SEPARADO y luego se juntan los resultados.
+    //
+    // Antes se unian las dos a la vez contra los canales, y eso multiplica
+    // una por otra: un canal con 5.000 mensajes y 500 menciones generaba
+    // 2.500.000 filas intermedias solo para contarlas. El COUNT(DISTINCT)
+    // devolvia el numero correcto, asi que el error no se veia mientras
+    // hubo pocos datos; con 56.000 mensajes la pagina dejo de responder.
+    `WITH msg AS (
+            SELECT channel_id, COUNT(*)::int AS mensajes
+              FROM tg_messages GROUP BY channel_id
+          ),
+          men AS (
+            SELECT channel_id,
+                   COUNT(*)::int                                              AS menciones,
+                   COUNT(*) FILTER (WHERE es_primera)::int                    AS primeras,
+                   COUNT(*) FILTER (WHERE anticipacion_seg > 0)::int          AS adelantadas,
+                   COUNT(*) FILTER (WHERE anticipacion_veredicto IS NOT NULL
+                                      AND anticipacion_veredicto <> 'sin_datos')::int AS medibles,
+                   AVG(anticipacion_seg) FILTER (WHERE anticipacion_seg <> 0)::int    AS anticipacion_med
+              FROM tg_mentions GROUP BY channel_id
+          )
+     SELECT c.title, c.username,
+            COALESCE(msg.mensajes, 0)    AS mensajes,
+            COALESCE(men.menciones, 0)   AS menciones,
+            COALESCE(men.primeras, 0)    AS primeras,
+            COALESCE(men.adelantadas, 0) AS adelantadas,
+            COALESCE(men.medibles, 0)    AS medibles,
+            men.anticipacion_med         AS anticipacion_med
        FROM tg_channels c
-       LEFT JOIN tg_messages m ON m.channel_id = c.id
-       LEFT JOIN tg_mentions me ON me.channel_id = c.id
-      GROUP BY c.id, c.title, c.username
-      ORDER BY COUNT(*) FILTER (WHERE me.anticipacion_seg > 0) DESC, COUNT(DISTINCT me.id) DESC
+       LEFT JOIN msg ON msg.channel_id = c.id
+       LEFT JOIN men ON men.channel_id = c.id
+      ORDER BY COALESCE(men.adelantadas, 0) DESC, COALESCE(men.menciones, 0) DESC
       LIMIT 40`,
   );
 
