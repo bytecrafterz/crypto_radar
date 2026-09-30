@@ -42,7 +42,11 @@ mal()  { printf '\033[1;31m  X   %s\033[0m\n' "$*"; }
 
 # ----------------------------------------------------------------------------
 azul "1/7  Usuario y carpetas"
-id radar >/dev/null 2>&1 || useradd --system --create-home --home-dir /var/lib/radar --shell /usr/sbin/nologin radar
+# --user-group explicito: en algunas imagenes useradd --system no crea el grupo
+# por su cuenta, y sin grupo 'radar' fallan todos los chown de despues.
+getent group radar >/dev/null || groupadd --system radar
+id radar >/dev/null 2>&1 || useradd --system --gid radar --create-home --home-dir /var/lib/radar --shell /usr/sbin/nologin radar
+[[ "$(id -gn radar)" == radar ]] || usermod -g radar radar
 mkdir -p "$COPIAS"
 ok "usuario radar"
 
