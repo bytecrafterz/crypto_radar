@@ -76,17 +76,25 @@ else
   DBPASS="$(openssl rand -hex 24)"
 fi
 if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='radar'" | grep -q 1; then
-  sudo -u postgres psql -q -c "CREATE ROLE radar LOGIN PASSWORD '$DBPASS'"
+  sudo -u postgres psql -q -c "CREATE ROLE radar LOGIN"
   ok "rol radar creado"
 fi
+# Siempre, no solo al crearlo: si una ejecucion anterior se corto antes de
+# escribir el .env, el rol se habria quedado con una contrasena que ya no
+# esta en ningun sitio.
+sudo -u postgres psql -q -c "ALTER ROLE radar PASSWORD '$DBPASS'"
 if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='radar'" | grep -q 1; then
   sudo -u postgres createdb -O radar radar
   ok "base de datos radar creada"
 fi
 if ! sudo -u postgres psql -d radar -tAc "SELECT 1 FROM information_schema.tables WHERE table_name='tokens'" | grep -q 1; then
   echo "  restaurando $(basename "$DUMP") ..."
+  # pg_restore corre como el usuario postgres, que no puede leer /root. La
+  # copia se deja en la carpeta de copias del servidor, que es ademas donde
+  # tiene que estar: pasa a ser la primera copia de esta maquina.
+  install -o radar -g radar -m 644 "$DUMP" "$COPIAS/$(basename "$DUMP")"
   # Todo lo de la copia ya pertenece a 'radar', asi que se restaura tal cual.
-  sudo -u postgres pg_restore -d radar -j 4 "$DUMP"
+  sudo -u postgres pg_restore -d radar -j 4 "$COPIAS/$(basename "$DUMP")"
   sudo -u postgres psql -d radar -q -c "ANALYZE"
   ok "copia restaurada: $(sudo -u postgres psql -d radar -tAc 'SELECT COUNT(*) FROM tokens') tokens"
 else
