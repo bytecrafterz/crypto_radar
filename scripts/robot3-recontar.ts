@@ -8,93 +8,55 @@
  * Hasta ahora las fuentes independientes se contaban por textos distintos
  * y no por canales: un canal que hablaba dos veces de un token sumaba dos
  * fuentes. El codigo ya esta corregido (src/robot3/fuentes.ts), pero los
- * veredictos guardados antes siguen con los numeros viejos, y algunos
+ * veredictos guardados antes conservan los numeros viejos, y algunos
  * muestran imposibles como "4 de 1 fuentes independientes".
  *
- * QUE HACE CON CADA VEREDICTO
- *   - Si aun estan sus mensajes de Telegram: se vuelve a evaluar con el
- *     mismo codigo del robot, sin enviar ningun aviso.
- *   - Si los mensajes ya no estan (el periodo recuperado del 9 al 21 de
- *     septiembre): no se puede recontar, asi que se limita al maximo que
- *     permite la regla corregida, que es el numero de canales.
- *   - Si ya se aviso al cliente: NO se toca. Es el registro de lo que se
- *     envio, y reescribirlo seria falsear el historial.
+ * QUE CORRIGE, Y QUE NO
+ * Solo el recuento. Con la regla nueva las fuentes independientes nunca
+ * pasan del numero de canales, que es justo donde el recuento viejo se
+ * pasaba: se limitan a ese numero y la nota social pierde lo que esas
+ * fuentes de mas le sumaban. Comparado con los mensajes que aun se
+ * conservan, da exactamente el valor de la regla nueva.
+ *
+ * NO se vuelve a evaluar el veredicto entero. Hacerlo usaria lo que se
+ * supo despues (la nota final del Robot 1, mensajes clasificados mas
+ * tarde) y reescribiria el pasado con ventaja: un token que luego salio
+ * mal apareceria descartado a toro pasado, y el Robot 3 pareceria mejor
+ * de lo que fue.
+ *
+ * Los avisos ya enviados no se tocan: son el registro de lo que recibio
+ * el cliente.
  */
 import { query, exec, logActivity, closeDb } from '../src/core/db.js';
-import { calcularVeredicto, evaluar } from '../src/robot3/evaluador.js';
-import type { Chain } from '../src/core/types.js';
+import { umbralesActuales } from '../src/robot3/umbrales.js';
 
 const aplicar = process.argv.includes('--aplicar');
+const minimoRojo = umbralesActuales().fuentesIndepMinimasRojo;
 
-interface Fila {
-  chain: Chain;
-  address: string;
-  symbol: string | null;
-  primera_mencion: Date;
-  nivel: string;
-  fuentes_total: number;
-  fuentes_indep: number;
-}
-
-// --- 1. Veredictos que aun tienen sus mensajes ------------------------------
-const conMensajes = await query<Fila>(
-  `SELECT c.chain, c.address, t.symbol, c.primera_mencion, c.nivel, c.fuentes_total, c.fuentes_indep
-     FROM tg_candidatos c
-     LEFT JOIN tokens t ON t.chain = c.chain AND t.address = c.address
-    WHERE c.enviado_at IS NULL
-      AND EXISTS (SELECT 1 FROM tg_mentions me WHERE me.chain = c.chain AND me.address = c.address)
+const filas = await query<{
+  symbol: string | null; address: string; nivel: string; fuentes_indep: number; fuentes_total: number;
+}>(
+  `SELECT t.symbol, c.address, c.nivel, c.fuentes_indep, c.fuentes_total
+     FROM tg_candidatos c LEFT JOIN tokens t ON t.chain = c.chain AND t.address = c.address
+    WHERE c.enviado_at IS NULL AND c.fuentes_indep > c.fuentes_total
     ORDER BY c.primera_mencion`,
 );
 
-let recontados = 0;
-let sinCambios = 0;
-const saltados: string[] = [];
-const cambios: string[] = [];
-for (const f of conMensajes) {
-  const nombre = f.symbol ?? f.address.slice(0, 8);
-  const c = await calcularVeredicto(f.chain, f.address);
-  if (!c) {
-    saltados.push(`${nombre} (falta el analisis del Robot 1)`);
-    continue;
-  }
-  // El robot guarda el veredicto bajo la primera mencion que conoce. Si
-  // desde entonces aparecio una mas antigua, evaluar() crearia otra fila
-  // en vez de corregir esta: mejor dejarla y decirlo.
-  if (c.primera?.ts?.getTime() !== f.primera_mencion.getTime()) {
-    saltados.push(`${nombre} (hay menciones mas antiguas que su veredicto)`);
-    continue;
-  }
-  const antes = `${f.fuentes_indep} de ${f.fuentes_total}, ${f.nivel}`;
-  const despues = `${c.r2.fuentesIndependientes} de ${c.r2.fuentesTotal}, ${c.veredicto.nivel}`;
-  if (antes === despues) sinCambios++;
-  else cambios.push(`${nombre.padEnd(14)} ${antes.padEnd(22)} -> ${despues}`);
-  if (aplicar) await evaluar(f.chain, f.address, { avisar: false });
-  recontados++;
-}
-
-// --- 2. Veredictos sin mensajes y con un recuento imposible ----------------
-const sinMensajes = `
-  enviado_at IS NULL AND fuentes_indep > fuentes_total
-  AND NOT EXISTS (SELECT 1 FROM tg_mentions me WHERE me.chain = tg_candidatos.chain
-                                                AND me.address = tg_candidatos.address)`;
-const limitar = await query<{ nivel: string; n: number }>(
-  `SELECT nivel, COUNT(*)::int AS n FROM tg_candidatos WHERE ${sinMensajes} GROUP BY nivel ORDER BY nivel`,
-);
-let limitados = 0;
+let corregidos = 0;
 if (aplicar) {
-  // La nota social sumaba 20 puntos por fuente independiente, con tope de
-  // 40: se le quita lo que aportaban las fuentes que no eran tales. El
-  // nivel no cambia: ninguno de estos llego al maximo, y el intermedio solo
-  // pide una fuente, que se sigue teniendo.
-  limitados = await exec(
+  // El nivel solo puede cambiar en uno de maxima prioridad que se quede
+  // por debajo del minimo de fuentes; el resto de sus condiciones son mas
+  // duras que las del nivel intermedio, asi que baja a ese.
+  corregidos = await exec(
     `UPDATE tg_candidatos SET
        score_social  = GREATEST(0, score_social - LEAST(40, fuentes_indep * 20) + LEAST(40, fuentes_total * 20)),
+       nivel         = CASE WHEN nivel = 'rojo' AND fuentes_total < $1 THEN 'naranja' ELSE nivel END,
        fuentes_indep = fuentes_total
-     WHERE ${sinMensajes}`,
+     WHERE enviado_at IS NULL AND fuentes_indep > fuentes_total`,
+    [minimoRojo],
   );
 }
 
-// --- 3. Avisos ya enviados: se dejan como estan -----------------------------
 const enviados = await query<{ symbol: string | null; address: string; fuentes_indep: number; fuentes_total: number }>(
   `SELECT t.symbol, c.address, c.fuentes_indep, c.fuentes_total
      FROM tg_candidatos c LEFT JOIN tokens t ON t.chain = c.chain AND t.address = c.address
@@ -102,17 +64,19 @@ const enviados = await query<{ symbol: string | null; address: string; fuentes_i
 );
 
 console.log(`\n${aplicar ? 'APLICADO' : 'SOLO MUESTRA (anade --aplicar para guardar)'}\n`);
-console.log(`Con mensajes, reevaluados con el codigo corregido: ${recontados}`);
-console.log(`  sin cambios: ${sinCambios}   con cambios: ${cambios.length}`);
-for (const c of cambios) console.log(`    ${c}`);
-if (saltados.length) {
-  console.log(`  no se pueden reevaluar: ${saltados.length}`);
-  for (const s of saltados) console.log(`    ${s}`);
+console.log(`Veredictos con mas fuentes independientes que canales: ${filas.length}`);
+const porNivel = new Map<string, number>();
+for (const f of filas) porNivel.set(f.nivel, (porNivel.get(f.nivel) ?? 0) + 1);
+for (const [nivel, n] of porNivel) console.log(`    ${nivel.padEnd(11)} ${n}`);
+const bajan = filas.filter((f) => f.nivel === 'rojo' && f.fuentes_total < minimoRojo);
+console.log(`  bajan del nivel maximo al intermedio: ${bajan.length}`);
+for (const f of filas.slice(0, 12)) {
+  console.log(`    ${(f.symbol ?? f.address.slice(0, 8)).padEnd(14)} ${f.fuentes_indep} de ${f.fuentes_total} -> ${f.fuentes_total} de ${f.fuentes_total}`);
 }
-const totalLimitar = limitar.reduce((s, x) => s + x.n, 0);
-console.log(`\nSin mensajes y con mas fuentes que canales, limitados al numero de canales: ${aplicar ? limitados : totalLimitar}`);
-for (const x of limitar) console.log(`    ${x.nivel.padEnd(11)} ${x.n}`);
-console.log(`\nAvisos ya enviados, que no se tocan: ${enviados.length}`);
+if (filas.length > 12) console.log(`    ... y ${filas.length - 12} mas`);
+if (aplicar) console.log(`\nCorregidos: ${corregidos}`);
+
+console.log(`\nAvisos ya enviados, que se conservan tal cual: ${enviados.length}`);
 for (const e of enviados) {
   console.log(`    ${(e.symbol ?? e.address.slice(0, 8)).padEnd(14)} ${e.fuentes_indep} de ${e.fuentes_total}`);
 }
@@ -121,10 +85,9 @@ if (aplicar) {
   await logActivity(
     'info',
     'robot3',
-    `Recuento de fuentes independientes corregido: ${recontados} veredictos reevaluados ` +
-      `(${cambios.length} con cambios), ${limitados} limitados al numero de canales. ` +
-      `Los ${enviados.length} avisos ya enviados se conservan tal cual.`,
-    { recontados, cambios: cambios.length, limitados, saltados: saltados.length },
+    `Recuento de fuentes independientes corregido en ${corregidos} veredictos guardados: ` +
+      `ya no pasan del numero de canales. Los ${enviados.length} avisos enviados se conservan tal cual.`,
+    { corregidos },
   );
 }
 console.log();

@@ -209,17 +209,16 @@ export function construirAviso(
 }
 
 /**
- * Calcula el veredicto de un token sin guardar nada ni avisar.
- * Devuelve null si falta alguna de las dos mitades.
+ * Evalua un token del que Telegram ha hablado y decide si avisar.
  */
-export async function calcularVeredicto(chain: Chain, address: string) {
+export async function evaluar(chain: Chain, address: string): Promise<void> {
   const r2 = await reunirSenalSocial(chain, address);
-  if (!r2) return null;
+  if (!r2) return;
 
   const r1 = await reunirSenalTecnica(chain, address);
   // Sin analisis del Robot 1 no hay nada que cruzar. No se avisa: la
   // mitad de la informacion no es informacion.
-  if (!r1) return null;
+  if (!r1) return;
 
   const t = await queryOne<{ symbol: string | null }>(
     'SELECT symbol FROM tokens WHERE chain = $1 AND address = $2',
@@ -233,25 +232,6 @@ export async function calcularVeredicto(chain: Chain, address: string) {
   // Los umbrales salen de config/robot3.yaml y se recargan solos: cambiar
   // un numero ahi no exige reiniciar ni tocar codigo.
   const veredicto = decidir(r1, r2, umbralesActuales());
-
-  return { r1, r2, t, primera, veredicto };
-}
-
-/**
- * Evalua un token del que Telegram ha hablado y decide si avisar.
- *
- * Con avisar = false solo se recalcula y se guarda el veredicto. Es lo
- * que usa scripts/robot3-recontar.ts para corregir veredictos antiguos:
- * un aviso sobre un token de hace semanas no le sirve a nadie.
- */
-export async function evaluar(
-  chain: Chain,
-  address: string,
-  opciones: { avisar?: boolean } = {},
-): Promise<void> {
-  const calculo = await calcularVeredicto(chain, address);
-  if (!calculo) return;
-  const { r1, r2, t, primera, veredicto } = calculo;
 
   // Se guarda SIEMPRE, avise o no. Los descartados son justamente lo que
   // hace falta para comprobar mas adelante si el sistema acertaba.
@@ -304,7 +284,6 @@ export async function evaluar(
     log.debug({ token: t?.symbol, nivel: veredicto.nivel }, 'sin nivel suficiente para avisar');
     return;
   }
-  if (opciones.avisar === false) return;
 
   // Ya se aviso de este token antes: no se repite.
   if (!fila || fila.ya) {
