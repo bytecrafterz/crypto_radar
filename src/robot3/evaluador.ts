@@ -212,6 +212,15 @@ export function construirAviso(
  * Evalua un token del que Telegram ha hablado y decide si avisar.
  */
 export async function evaluar(chain: Chain, address: string): Promise<void> {
+  // Ya se aviso de este token: su veredicto es el registro de lo que se
+  // envio y no hay nada mas que decidir.
+  const avisado = await queryOne<{ n: number }>(
+    `SELECT COUNT(*)::int AS n FROM tg_candidatos
+      WHERE chain = $1 AND address = $2 AND enviado_at IS NOT NULL`,
+    [chain, address],
+  );
+  if ((avisado?.n ?? 0) > 0) return;
+
   const r2 = await reunirSenalSocial(chain, address);
   if (!r2) return;
 
@@ -233,6 +242,26 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
   // un numero ahi no exige reiniciar ni tocar codigo.
   const veredicto = decidir(r1, r2, umbralesActuales());
 
+  const primeraMencion = primera?.ts ?? new Date();
+
+  // UN VEREDICTO POR TOKEN
+  // La fila se identifica por la primera mencion, y esa fecha puede ir
+  // hacia atras: al entrar en un canal se lee su historico, y a veces
+  // aparece una mencion mas antigua que la que se conocia. Antes eso
+  // creaba una fila nueva y la vieja se quedaba congelada a medias, asi
+  // que el mismo token salia dos veces en el panel y con niveles
+  // distintos. Ahora la fila que ya habia se mueve a la nueva fecha.
+  await exec(
+    `UPDATE tg_candidatos SET primera_mencion = $3
+      WHERE id = (SELECT id FROM tg_candidatos
+                   WHERE chain = $1 AND address = $2 AND enviado_at IS NULL
+                   ORDER BY primera_mencion LIMIT 1)
+        AND primera_mencion > $3
+        AND NOT EXISTS (SELECT 1 FROM tg_candidatos
+                         WHERE chain = $1 AND address = $2 AND primera_mencion = $3)`,
+    [chain, address, primeraMencion],
+  );
+
   // Se guarda SIEMPRE, avise o no. Los descartados son justamente lo que
   // hace falta para comprobar mas adelante si el sistema acertaba.
   //
@@ -245,8 +274,9 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
   // La fila de un token avisado es el registro de lo que se le envio al
   // cliente. Si las vueltas siguientes la reescribian, un aviso de maxima
   // prioridad aparecia luego en el panel como "amarillo", y ya no habia
-  // forma de saber que datos lo justificaron.
-  const fila = await queryOne<{ id: number; ya: boolean }>(
+  // forma de saber que datos lo justificaron. Los avisados ya no llegan
+  // hasta aqui (ver el principio); la condicion es una segunda barrera.
+  const fila = await queryOne<{ id: number }>(
     `INSERT INTO tg_candidatos
        (chain, address, primera_mencion, fuentes_total, fuentes_indep, anticipacion_seg,
         score_social, score_fuentes, score_evidencia, score_tecnica, score_riesgo,
@@ -264,9 +294,9 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
        vetado           = EXCLUDED.vetado,
        nivel            = EXCLUDED.nivel
      WHERE tg_candidatos.enviado_at IS NULL
-     RETURNING id, (xmax <> 0) AS ya`,
+     RETURNING id`,
     [
-      chain, address, primera?.ts ?? new Date(),
+      chain, address, primeraMencion,
       r2.fuentesTotal, r2.fuentesIndependientes, r2.anticipacionSeg,
       // Las notas del Robot 1 llevan decimales (54.5, 7.4) y estas
       // columnas son enteras: sin redondear, PostgreSQL rechaza la fila
@@ -285,23 +315,13 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
     return;
   }
 
-  // Ya se aviso de este token antes: no se repite.
-  if (!fila || fila.ya) {
-    const yaEnviado = await queryOne<{ n: number }>(
-      `SELECT COUNT(*)::int AS n FROM tg_candidatos
-        WHERE chain = $1 AND address = $2 AND enviado_at IS NOT NULL`,
-      [chain, address],
-    );
-    if ((yaEnviado?.n ?? 0) > 0) return;
-  }
-
   if ((await avisosHoy()) >= avisosPorDia()) {
     log.info({ token: t?.symbol }, 'tope diario de avisos de convergencia alcanzado');
     return;
   }
 
   const mensaje = construirAviso(
-    { chain, address, symbol: t?.symbol ?? null, primeraMencion: primera?.ts ?? new Date() },
+    { chain, address, symbol: t?.symbol ?? null, primeraMencion },
     r1, r2, veredicto,
   );
 
@@ -318,6 +338,8 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
   }
 }
 
+const MAXIMO_POR_VUELTA = 300;
+
 /**
  * Repasa los tokens mencionados recientemente y evalua los que aun no
  * tienen veredicto. Se ejecuta periodicamente en vez de al momento,
@@ -330,14 +352,27 @@ export async function runRobot3(): Promise<number> {
   // historico, asi que llegan mensajes de hace dias: filtrando por
   // posted_at quedaban todos fuera de la ventana y no se evaluaba nada,
   // aunque acabaramos de recogerlos.
+  //
+  // TODOS LOS PENDIENTES, NO SOLO LOS PRIMEROS 40
+  // Antes habia un LIMIT 40 sin orden. En cuanto habia mas de 40 tokens
+  // con menciones del ultimo dia (al entrar en canales nuevos llegan
+  // decenas de golpe), cada vuelta cogia los mismos 40 y el resto no se
+  // evaluaba nunca. Evaluar uno son unas pocas consultas: el tope queda
+  // solo como freno de seguridad, y se empieza por lo mas reciente.
   const pendientes = await query<{ chain: Chain; address: string }>(
-    `SELECT DISTINCT me.chain, me.address
+    `SELECT me.chain, me.address
        FROM tg_mentions me
        JOIN tokens t ON t.chain = me.chain AND t.address = me.address
       WHERE me.creado_at > now() - interval '24 hours'
         AND t.enriched_at IS NOT NULL
-      LIMIT 40`,
+      GROUP BY me.chain, me.address
+      ORDER BY MAX(me.creado_at) DESC
+      LIMIT $1`,
+    [MAXIMO_POR_VUELTA],
   );
+  if (pendientes.length === MAXIMO_POR_VUELTA) {
+    log.warn({ tope: MAXIMO_POR_VUELTA }, 'mas tokens pendientes que el tope por vuelta; los mas antiguos esperan');
+  }
 
   let fallos = 0;
   for (const p of pendientes) {

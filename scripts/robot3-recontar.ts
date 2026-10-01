@@ -26,6 +26,13 @@
  *
  * Los avisos ya enviados no se tocan: son el registro de lo que recibio
  * el cliente.
+ *
+ * VEREDICTOS DUPLICADOS
+ * Por otro fallo, ya corregido en evaluador.ts, cuando aparecia una
+ * mencion mas antigua de un token ya evaluado se creaba una fila nueva y
+ * la anterior se quedaba congelada a medias. De cada token se conserva la
+ * fila que el robot siguio actualizando (la de la primera mencion mas
+ * antigua, o la del aviso si se envio) y se borran las congeladas.
  */
 import { query, exec, logActivity, closeDb } from '../src/core/db.js';
 import { umbralesActuales } from '../src/robot3/umbrales.js';
@@ -33,12 +40,28 @@ import { umbralesActuales } from '../src/robot3/umbrales.js';
 const aplicar = process.argv.includes('--aplicar');
 const minimoRojo = umbralesActuales().fuentesIndepMinimasRojo;
 
+// --- 1. Filas congeladas de tokens con mas de un veredicto -----------------
+const congeladas = `
+  c.enviado_at IS NULL
+  AND EXISTS (SELECT 1 FROM tg_candidatos o
+               WHERE o.chain = c.chain AND o.address = c.address AND o.id <> c.id
+                 AND (o.enviado_at IS NOT NULL OR o.primera_mencion < c.primera_mencion))`;
+const duplicadas = await query<{ symbol: string | null; address: string; nivel: string; fuentes: string }>(
+  `SELECT t.symbol, c.address, c.nivel, c.fuentes_indep || ' de ' || c.fuentes_total AS fuentes
+     FROM tg_candidatos c LEFT JOIN tokens t ON t.chain = c.chain AND t.address = c.address
+    WHERE ${congeladas} ORDER BY c.primera_mencion`,
+);
+let borradas = 0;
+if (aplicar) borradas = await exec(`DELETE FROM tg_candidatos c WHERE ${congeladas}`);
+
+// --- 2. Fuentes independientes por encima del numero de canales -------------
 const filas = await query<{
   symbol: string | null; address: string; nivel: string; fuentes_indep: number; fuentes_total: number;
 }>(
   `SELECT t.symbol, c.address, c.nivel, c.fuentes_indep, c.fuentes_total
      FROM tg_candidatos c LEFT JOIN tokens t ON t.chain = c.chain AND t.address = c.address
     WHERE c.enviado_at IS NULL AND c.fuentes_indep > c.fuentes_total
+      AND NOT (${congeladas})
     ORDER BY c.primera_mencion`,
 );
 
@@ -64,7 +87,13 @@ const enviados = await query<{ symbol: string | null; address: string; fuentes_i
 );
 
 console.log(`\n${aplicar ? 'APLICADO' : 'SOLO MUESTRA (anade --aplicar para guardar)'}\n`);
-console.log(`Veredictos con mas fuentes independientes que canales: ${filas.length}`);
+console.log(`Veredictos duplicados que se quedaron congelados: ${aplicar ? borradas : duplicadas.length}`);
+for (const d of duplicadas.slice(0, 8)) {
+  console.log(`    ${(d.symbol ?? d.address.slice(0, 8)).padEnd(14)} ${d.nivel.padEnd(11)} ${d.fuentes}`);
+}
+if (duplicadas.length > 8) console.log(`    ... y ${duplicadas.length - 8} mas`);
+
+console.log(`\nVeredictos con mas fuentes independientes que canales: ${filas.length}`);
 const porNivel = new Map<string, number>();
 for (const f of filas) porNivel.set(f.nivel, (porNivel.get(f.nivel) ?? 0) + 1);
 for (const [nivel, n] of porNivel) console.log(`    ${nivel.padEnd(11)} ${n}`);
@@ -85,9 +114,10 @@ if (aplicar) {
   await logActivity(
     'info',
     'robot3',
-    `Recuento de fuentes independientes corregido en ${corregidos} veredictos guardados: ` +
-      `ya no pasan del numero de canales. Los ${enviados.length} avisos enviados se conservan tal cual.`,
-    { corregidos },
+    `Veredictos del Robot 3 corregidos: ${borradas} duplicados congelados borrados y ` +
+      `${corregidos} con mas fuentes independientes que canales limitados a ese numero. ` +
+      `Los ${enviados.length} avisos enviados se conservan tal cual.`,
+    { borradas, corregidos },
   );
 }
 console.log();
