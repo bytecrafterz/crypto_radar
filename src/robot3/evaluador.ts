@@ -256,7 +256,7 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
       WHERE id = (SELECT id FROM tg_candidatos
                    WHERE chain = $1 AND address = $2 AND enviado_at IS NULL
                    ORDER BY primera_mencion LIMIT 1)
-        AND primera_mencion > $3
+        AND primera_mencion <> $3
         AND NOT EXISTS (SELECT 1 FROM tg_candidatos
                          WHERE chain = $1 AND address = $2 AND primera_mencion = $3)`,
     [chain, address, primeraMencion],
