@@ -18,6 +18,7 @@ import { query, queryOne, exec } from '../core/db.js';
 import { child } from '../core/logger.js';
 import { notify } from '../worker/notify.js';
 import { decidir, type EntradaRobot1, type EntradaRobot2 } from './convergencia.js';
+import { contarFuentes, type MencionFuente } from './fuentes.js';
 import { umbralesActuales, avisosPorDia } from './umbrales.js';
 import type { Chain } from '../core/types.js';
 
@@ -42,24 +43,12 @@ interface DatosMencion {
  * Reune lo que sabe el Robot 2 sobre un token.
  *
  * La parte importante es distinguir fuentes de verdad independientes de
- * las que se estan copiando: se agrupan por el hash del texto
- * normalizado, asi que cinco canales publicando lo mismo cuentan como
- * uno solo.
+ * las que se estan copiando. Como se cuentan esta en fuentes.ts: son
+ * canales que publicaron algo por su cuenta, no textos distintos.
  */
 async function reunirSenalSocial(chain: string, address: string): Promise<EntradaRobot2 | null> {
-  const f = await queryOne<{
-    fuentes_total: number;
-    fuentes_indep: number;
-    fuentes_utiles: number | null;
-    con_informacion: number | null;
-    anticipacion: number | null;
-    reputacion: number | null;
-    tipo: string | null;
-  }>(
-    `SELECT COUNT(DISTINCT me.channel_id)::int                        AS fuentes_total,
-            -- Textos distintos = fuentes que no se estan copiando
-            COUNT(DISTINCT m.text_hash)::int                          AS fuentes_indep,
-            -- Fuentes que ademas dicen algo, no que solo venden.
+  const menciones = await query<MencionFuente>(
+    `SELECT me.channel_id AS canal, m.text_hash AS hash, m.id AS mensaje, m.posted_at AS publicado,
             -- Una promocion pagada NO es una fuente independiente por
             -- mucho que venga de otro canal: es el mismo interes pagando
             -- dos veces, y contarla como tal es justo lo que dispara una
@@ -71,12 +60,22 @@ async function reunirSenalSocial(chain: string, address: string): Promise<Entrad
             -- que diga el mensaje. Excluirlo hacia que una caida ajena fuera
             -- bajando las fuentes del Robot 3 en silencio: cuanto mas durara
             -- la caida, menos podia converger, sin que nada lo avisara.
-            COUNT(DISTINCT m.text_hash) FILTER (
-              WHERE m.clasificacion IS NULL
-                 OR m.clasificacion = 'indeterminado'
-                 OR m.clasificacion = 'informacion'
-            )::int                                                    AS fuentes_utiles,
-            COUNT(*) FILTER (WHERE m.clasificacion = 'informacion')::int AS con_informacion,
+            (m.clasificacion IS NULL
+              OR m.clasificacion IN ('indeterminado', 'informacion')) AS util
+       FROM tg_mentions me
+       JOIN tg_messages m ON m.id = me.message_id
+      WHERE me.chain = $1 AND me.address = $2`,
+    [chain, address],
+  );
+  if (menciones.length === 0) return null;
+
+  const f = await queryOne<{
+    con_informacion: number | null;
+    anticipacion: number | null;
+    reputacion: number | null;
+    tipo: string | null;
+  }>(
+    `SELECT COUNT(*) FILTER (WHERE m.clasificacion = 'informacion')::int AS con_informacion,
             AVG(me.anticipacion_seg)::int                             AS anticipacion,
             AVG(COALESCE(s.tasa_utiles, 0))::int                      AS reputacion,
             MAX(me.tipo_senal)                                        AS tipo
@@ -86,14 +85,14 @@ async function reunirSenalSocial(chain: string, address: string): Promise<Entrad
       WHERE me.chain = $1 AND me.address = $2`,
     [chain, address],
   );
+  if (!f) return null;
 
-  if (!f || f.fuentes_total === 0) return null;
+  const fuentes = contarFuentes(menciones);
 
   return {
-    fuentesTotal: f.fuentes_total,
-    // Si el clasificador esta puesto, mandan las fuentes que informan.
-    // Sin clasificador, clasificacion es NULL y esto vale lo mismo que
-    // antes, asi que el sistema se comporta igual que hasta ahora.
+    fuentesTotal: fuentes.total,
+    // Si el clasificador esta puesto, solo cuentan los canales que
+    // informan. Sin clasificador, clasificacion es NULL y todo es util.
     //
     // OJO CON EL SUELO DE 1
     // Aqui habia un Math.max(1, ...) heredado de cuando no existia el
@@ -102,7 +101,7 @@ async function reunirSenalSocial(chain: string, address: string): Promise<Entrad
     // independiente en vez de con ninguna, y con eso le bastaba para
     // llegar a "convergencia". Cero fuentes utiles son cero, y ese token
     // no tiene que subir de nivel.
-    fuentesIndependientes: f.fuentes_utiles ?? f.fuentes_indep,
+    fuentesIndependientes: fuentes.independientes,
     anticipacionSeg: f.anticipacion,
     reputacionMedia: f.reputacion ?? 0,
     // Ahora si se puede afirmar algo: hay al menos un mensaje que el
@@ -210,16 +209,17 @@ export function construirAviso(
 }
 
 /**
- * Evalua un token del que Telegram ha hablado y decide si avisar.
+ * Calcula el veredicto de un token sin guardar nada ni avisar.
+ * Devuelve null si falta alguna de las dos mitades.
  */
-export async function evaluar(chain: Chain, address: string): Promise<void> {
+export async function calcularVeredicto(chain: Chain, address: string) {
   const r2 = await reunirSenalSocial(chain, address);
-  if (!r2) return;
+  if (!r2) return null;
 
   const r1 = await reunirSenalTecnica(chain, address);
   // Sin analisis del Robot 1 no hay nada que cruzar. No se avisa: la
   // mitad de la informacion no es informacion.
-  if (!r1) return;
+  if (!r1) return null;
 
   const t = await queryOne<{ symbol: string | null }>(
     'SELECT symbol FROM tokens WHERE chain = $1 AND address = $2',
@@ -234,8 +234,38 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
   // un numero ahi no exige reiniciar ni tocar codigo.
   const veredicto = decidir(r1, r2, umbralesActuales());
 
+  return { r1, r2, t, primera, veredicto };
+}
+
+/**
+ * Evalua un token del que Telegram ha hablado y decide si avisar.
+ *
+ * Con avisar = false solo se recalcula y se guarda el veredicto. Es lo
+ * que usa scripts/robot3-recontar.ts para corregir veredictos antiguos:
+ * un aviso sobre un token de hace semanas no le sirve a nadie.
+ */
+export async function evaluar(
+  chain: Chain,
+  address: string,
+  opciones: { avisar?: boolean } = {},
+): Promise<void> {
+  const calculo = await calcularVeredicto(chain, address);
+  if (!calculo) return;
+  const { r1, r2, t, primera, veredicto } = calculo;
+
   // Se guarda SIEMPRE, avise o no. Los descartados son justamente lo que
   // hace falta para comprobar mas adelante si el sistema acertaba.
+  //
+  // AL REEVALUAR SE ACTUALIZA TODO EL VEREDICTO
+  // Antes solo se actualizaban algunas columnas, y la fila mezclaba datos
+  // de la primera vuelta con los de la ultima: un aviso que decia "12 min
+  // antes del movimiento" quedaba guardado sin anticipacion.
+  //
+  // Y UNA VEZ AVISADO, NO SE TOCA
+  // La fila de un token avisado es el registro de lo que se le envio al
+  // cliente. Si las vueltas siguientes la reescribian, un aviso de maxima
+  // prioridad aparecia luego en el panel como "amarillo", y ya no habia
+  // forma de saber que datos lo justificaron.
   const fila = await queryOne<{ id: number; ya: boolean }>(
     `INSERT INTO tg_candidatos
        (chain, address, primera_mencion, fuentes_total, fuentes_indep, anticipacion_seg,
@@ -243,11 +273,17 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
         vetado, nivel)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
      ON CONFLICT (chain, address, primera_mencion) DO UPDATE SET
-       fuentes_total = EXCLUDED.fuentes_total,
-       fuentes_indep = EXCLUDED.fuentes_indep,
-       score_tecnica = EXCLUDED.score_tecnica,
-       score_riesgo  = EXCLUDED.score_riesgo,
-       nivel         = EXCLUDED.nivel
+       fuentes_total    = EXCLUDED.fuentes_total,
+       fuentes_indep    = EXCLUDED.fuentes_indep,
+       anticipacion_seg = EXCLUDED.anticipacion_seg,
+       score_social     = EXCLUDED.score_social,
+       score_fuentes    = EXCLUDED.score_fuentes,
+       score_evidencia  = EXCLUDED.score_evidencia,
+       score_tecnica    = EXCLUDED.score_tecnica,
+       score_riesgo     = EXCLUDED.score_riesgo,
+       vetado           = EXCLUDED.vetado,
+       nivel            = EXCLUDED.nivel
+     WHERE tg_candidatos.enviado_at IS NULL
      RETURNING id, (xmax <> 0) AS ya`,
     [
       chain, address, primera?.ts ?? new Date(),
@@ -268,6 +304,7 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
     log.debug({ token: t?.symbol, nivel: veredicto.nivel }, 'sin nivel suficiente para avisar');
     return;
   }
+  if (opciones.avisar === false) return;
 
   // Ya se aviso de este token antes: no se repite.
   if (!fila || fila.ya) {
