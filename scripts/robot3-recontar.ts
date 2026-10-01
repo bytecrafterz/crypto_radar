@@ -33,12 +33,40 @@
  * la anterior se quedaba congelada a medias. De cada token se conserva la
  * fila que el robot siguio actualizando (la de la primera mencion mas
  * antigua, o la del aviso si se envio) y se borran las congeladas.
+ *
+ * AVISOS REESCRITOS DESPUES DE ENVIARSE
+ * Antes de corregirse evaluador.ts, las vueltas siguientes a un aviso
+ * podian reescribir su fila. Le paso a TRENDS: salio como alta
+ * convergencia con oportunidad 55,4 y riesgo 10, y su fila acabo en
+ * "amarillo" con 41 y 25. Se devuelve a lo que dice el propio aviso.
  */
 import { query, exec, logActivity, closeDb } from '../src/core/db.js';
 import { umbralesActuales } from '../src/robot3/umbrales.js';
 
 const aplicar = process.argv.includes('--aplicar');
 const minimoRojo = umbralesActuales().fuentesIndepMinimasRojo;
+
+// --- 0. Avisos cuya fila se reescribio despues de enviarse -----------------
+// Los valores salen del texto del aviso tal como llego a Discord el
+// 19/09/2026 a las 01:57 UTC. Las notas se guardan redondeadas, como hace
+// evaluador.ts.
+const AVISOS_REESCRITOS = [
+  { chain: 'solana', address: '3W3K5i4T2vARM1UzJHh48dw4uNhjtg3Wk8GS2inmNUZV', simbolo: 'TRENDS', tecnica: 55, riesgo: 10 },
+];
+let restaurados = 0;
+for (const a of AVISOS_REESCRITOS) {
+  const filtro = `chain = $1 AND address = $2 AND enviado_at IS NOT NULL
+                  AND (nivel <> 'rojo' OR score_tecnica <> $3 OR score_riesgo <> $4)`;
+  const pendiente = await query(`SELECT 1 FROM tg_candidatos WHERE ${filtro}`, [a.chain, a.address, a.tecnica, a.riesgo]);
+  if (pendiente.length === 0) continue;
+  console.log(`Aviso reescrito despues de enviarse: ${a.simbolo} -> rojo, oportunidad ${a.tecnica}, riesgo ${a.riesgo}`);
+  if (aplicar) {
+    restaurados += await exec(
+      `UPDATE tg_candidatos SET nivel = 'rojo', score_tecnica = $3, score_riesgo = $4 WHERE ${filtro}`,
+      [a.chain, a.address, a.tecnica, a.riesgo],
+    );
+  }
+}
 
 // --- 1. Filas congeladas de tokens con mas de un veredicto -----------------
 const congeladas = `
@@ -105,7 +133,7 @@ for (const f of filas.slice(0, 12)) {
 if (filas.length > 12) console.log(`    ... y ${filas.length - 12} mas`);
 if (aplicar) console.log(`\nCorregidos: ${corregidos}`);
 
-console.log(`\nAvisos ya enviados, que se conservan tal cual: ${enviados.length}`);
+console.log(`\nAvisos ya enviados, que no se recalculan: ${enviados.length}`);
 for (const e of enviados) {
   console.log(`    ${(e.symbol ?? e.address.slice(0, 8)).padEnd(14)} ${e.fuentes_indep} de ${e.fuentes_total}`);
 }
@@ -114,10 +142,10 @@ if (aplicar) {
   await logActivity(
     'info',
     'robot3',
-    `Veredictos del Robot 3 corregidos: ${borradas} duplicados congelados borrados y ` +
-      `${corregidos} con mas fuentes independientes que canales limitados a ese numero. ` +
-      `Los ${enviados.length} avisos enviados se conservan tal cual.`,
-    { borradas, corregidos },
+    `Veredictos del Robot 3 corregidos: ${borradas} duplicados congelados borrados, ` +
+      `${corregidos} con mas fuentes independientes que canales limitados a ese numero y ` +
+      `${restaurados} aviso enviado devuelto a lo que decia el aviso.`,
+    { borradas, corregidos, restaurados },
   );
 }
 console.log();

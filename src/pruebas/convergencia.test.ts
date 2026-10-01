@@ -7,7 +7,9 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { decidir, type EntradaRobot1, type EntradaRobot2 } from '../robot3/convergencia.js';
+import {
+  decidir, describirAnticipacion, type EntradaRobot1, type EntradaRobot2,
+} from '../robot3/convergencia.js';
 
 /** Token limpio y con buena pinta segun los datos de la cadena. */
 const R1_BUENO: EntradaRobot1 = {
@@ -152,4 +154,17 @@ test('los umbrales que se pasan mandan sobre los de por defecto', () => {
     reputacionMinimaRojo: 50, tecnicaMinimaNaranja: 40, riesgoMaximoNaranja: 60,
   });
   assert.equal(laxo.nivel, 'rojo', 'bajando el liston a 45 una nota de 50 si llega');
+});
+
+test('la anticipacion se dice igual en todo el aviso, tambien cuando es casi cero', () => {
+  // El aviso de TRENDS decia "sin medir todavia" arriba y "0 min antes
+  // del movimiento" abajo: estaba medida, pero era de menos de un minuto.
+  assert.equal(describirAnticipacion(20), 'menos de 1 min antes del movimiento');
+  assert.equal(describirAnticipacion(0), 'menos de 1 min antes del movimiento');
+  assert.equal(describirAnticipacion(null), 'sin medir todavia');
+  assert.equal(describirAnticipacion(720), '12 min antes del movimiento');
+  assert.equal(describirAnticipacion(-300), '5 min despues del movimiento');
+
+  const v = decidir(R1_BUENO, { ...R2_FUERTE, anticipacionSeg: 20 });
+  assert.ok(v.explicacion.includes('La informacion aparecio menos de 1 min antes del movimiento.'));
 });

@@ -17,7 +17,7 @@
 import { query, queryOne, exec } from '../core/db.js';
 import { child } from '../core/logger.js';
 import { notify } from '../worker/notify.js';
-import { decidir, type EntradaRobot1, type EntradaRobot2 } from './convergencia.js';
+import { decidir, describirAnticipacion, type EntradaRobot1, type EntradaRobot2 } from './convergencia.js';
 import { contarFuentes, type MencionFuente } from './fuentes.js';
 import { umbralesActuales, avisosPorDia } from './umbrales.js';
 import type { Chain } from '../core/types.js';
@@ -177,10 +177,7 @@ export function construirAviso(
       ? `https://jup.ag/swap/SOL-${d.address}`
       : `https://app.uniswap.org/swap?chain=base&outputCurrency=${d.address}`;
 
-  const anticipacion =
-    r2.anticipacionSeg && r2.anticipacionSeg > 0
-      ? `${Math.round(r2.anticipacionSeg / 60)} min antes del movimiento`
-      : 'sin medir todavia';
+  const anticipacion = describirAnticipacion(r2.anticipacionSeg);
 
   return [
     `🚨 <b>ALTA CONVERGENCIA · ${d.symbol ?? '?'}</b>`,

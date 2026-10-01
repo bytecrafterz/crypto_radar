@@ -107,6 +107,20 @@ function puntuarSocial(r2: EntradaRobot2): number {
   return Math.min(100, p);
 }
 
+/**
+ * La anticipacion dicha en palabras, igual en todo el aviso.
+ *
+ * Antes la cabecera y los motivos la escribian cada uno a su manera, y un
+ * mismo aviso decia "sin medir todavia" arriba y "0 min antes del
+ * movimiento" abajo.
+ */
+export function describirAnticipacion(seg: number | null): string {
+  if (seg === null) return 'sin medir todavia';
+  if (seg < 0) return `${Math.max(1, Math.round(-seg / 60))} min despues del movimiento`;
+  if (seg < 60) return 'menos de 1 min antes del movimiento';
+  return `${Math.round(seg / 60)} min antes del movimiento`;
+}
+
 /** Puntua la anticipacion, 0-100. */
 function puntuarAnticipacion(seg: number | null): number {
   if (seg === null) return 0;
@@ -204,9 +218,7 @@ export function decidir(
     explicacion.push(
       `Analisis tecnico fuerte (${componentes.tecnica}) con riesgo bajo (${componentes.riesgo}).`,
       `${r2.fuentesIndependientes} fuentes independientes, no copias unas de otras.`,
-      r2.anticipacionSeg !== null
-        ? `La informacion aparecio ${Math.round(r2.anticipacionSeg / 60)} min antes del movimiento.`
-        : 'Informacion anticipada.',
+      `La informacion aparecio ${describirAnticipacion(r2.anticipacionSeg)}.`,
     );
     if (r2.afirmacionVerificada) explicacion.push('La afirmacion se pudo comprobar.');
     return {
