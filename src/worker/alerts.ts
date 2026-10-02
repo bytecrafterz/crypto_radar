@@ -7,7 +7,7 @@
 import type { TokenAnalysis, SuspiciousEvent } from '../core/types.js';
 import { child } from '../core/logger.js';
 import { getFilters } from '../core/config.js';
-import { logActivity } from '../core/db.js';
+import { logActivity, queryOne } from '../core/db.js';
 import * as repo from '../core/repo.js';
 import { isPaused } from './telegram.js';
 import { notify } from './notify.js';
@@ -93,7 +93,30 @@ function opportunityEmoji(op: number): string {
 //  Redaccion del mensaje
 // --------------------------------------------------------------------------
 
-export function buildOpportunityMessage(a: TokenAnalysis): string {
+/**
+ * Lo que el Robot 2 sabe de un token, para el aviso del Robot 1.
+ *
+ * Los tres robots tienen que funcionar como un solo sistema. Si de un token
+ * que avisa el Robot 1 ya se esta hablando en Telegram, es informacion que
+ * el cliente quiere tener delante, resumida en espanol, sin tener que ir a
+ * buscarla al panel.
+ */
+export async function lineasTelegram(chain: string, address: string): Promise<string[]> {
+  const f = await queryOne<{ menciones: number; canales: number; resumen: string | null }>(
+    `SELECT COUNT(*)::int AS menciones, COUNT(DISTINCT me.channel_id)::int AS canales,
+            (SELECT m.resumen_es FROM tg_mentions x JOIN tg_messages m ON m.id = x.message_id
+              WHERE x.chain = $1 AND x.address = $2 AND m.resumen_es IS NOT NULL
+              ORDER BY (m.clasificacion = 'informacion') DESC, x.posted_at DESC LIMIT 1) AS resumen
+       FROM tg_mentions me WHERE me.chain = $1 AND me.address = $2`,
+    [chain, address],
+  ).catch(() => null);
+  if (!f || f.menciones === 0) return [];
+  const lineas = [`📣 <b>En Telegram</b>: ${f.menciones} mencion(es) en ${f.canales} canal(es).`];
+  if (f.resumen) lineas.push(`<i>${escapeHtml(f.resumen)}</i>`);
+  return lineas;
+}
+
+export function buildOpportunityMessage(a: TokenAnalysis, telegram: string[] = []): string {
   const { pair, security, holders, deployer, score, suspicious } = a;
   if (!score) return '';
 
@@ -236,6 +259,12 @@ export function buildOpportunityMessage(a: TokenAnalysis): string {
   if (deployer?.deployer) {
     lines.push('');
     lines.push(`<i>Creador: ${escapeHtml(deployer.deployer)}</i>`);
+  }
+
+  // Lo que sabe el Robot 2 de este token, si sabe algo.
+  if (telegram.length > 0) {
+    lines.push('');
+    lines.push(...telegram);
   }
 
   lines.push('');
@@ -384,7 +413,7 @@ export async function maybeAlert(
   }
 
   const paused = await isPaused();
-  const message = buildOpportunityMessage(analysis);
+  const message = buildOpportunityMessage(analysis, await lineasTelegram(analysis.pair.chain, analysis.pair.tokenAddress));
   const result = paused
     ? { ok: false, error: 'Alertas pausadas por el usuario', results: [] }
     : await notify(message, {

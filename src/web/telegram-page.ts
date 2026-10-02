@@ -23,6 +23,7 @@ interface Resumen {
 interface FilaFuente {
   title: string | null;
   username: string | null;
+  active: boolean;
   mensajes: number;
   menciones: number;
   primeras: number;
@@ -44,6 +45,8 @@ interface FilaMencion {
   anticipacion_veredicto: string | null;
   opportunity: number | null;
   risk: number | null;
+  resumen_es: string | null;
+  nivel: string | null;
 }
 
 interface FilaMensaje {
@@ -52,7 +55,23 @@ interface FilaMensaje {
   text: string | null;
   triage: string | null;
   triage_motivo: string | null;
+  clasificacion: string | null;
+  clasificacion_motivo: string | null;
+  resumen_es: string | null;
+  idioma: string | null;
 }
+
+/** Nombre del nivel del Robot 3 tal como se ve en su pagina. */
+const NIVEL: Record<string, { texto: string; color: string }> = {
+  rojo: { texto: 'Convergencia fuerte', color: 'red' },
+  naranja: { texto: 'Convergencia', color: 'yellow' },
+  amarillo: { texto: 'Seguimiento', color: 'blue' },
+  descartado: { texto: 'Descartado', color: 'gray' },
+};
+
+const CLASE_COLOR: Record<string, string> = {
+  informacion: 'green', promocion: 'yellow', hype: 'gray', indeterminado: 'gray',
+};
 
 function minutos(seg: number | null, veredicto?: string | null): string {
   // El veredicto va primero: "sin movimiento" y "sin datos" se guardan sin
@@ -104,7 +123,7 @@ export async function renderTelegram(): Promise<string> {
                    AVG(anticipacion_seg) FILTER (WHERE anticipacion_seg <> 0)::int    AS anticipacion_med
               FROM tg_mentions GROUP BY channel_id
           )
-     SELECT c.title, c.username,
+     SELECT c.title, c.username, c.active,
             COALESCE(msg.mensajes, 0)    AS mensajes,
             COALESCE(men.menciones, 0)   AS menciones,
             COALESCE(men.primeras, 0)    AS primeras,
@@ -114,7 +133,7 @@ export async function renderTelegram(): Promise<string> {
        FROM tg_channels c
        LEFT JOIN msg ON msg.channel_id = c.id
        LEFT JOIN men ON men.channel_id = c.id
-      ORDER BY COALESCE(men.adelantadas, 0) DESC, COALESCE(men.menciones, 0) DESC
+      ORDER BY c.active DESC, COALESCE(men.adelantadas, 0) DESC, COALESCE(men.menciones, 0) DESC
       LIMIT 40`,
   );
 
@@ -122,9 +141,14 @@ export async function renderTelegram(): Promise<string> {
     `SELECT t.symbol, me.chain, me.address, c.title AS canal, me.posted_at,
             me.resuelto_por, me.es_primera, me.anticipacion_seg,
             me.anticipacion_veredicto,
-            t.last_opportunity AS opportunity, t.last_risk AS risk
+            t.last_opportunity AS opportunity, t.last_risk AS risk,
+            m.resumen_es,
+            (SELECT nivel FROM tg_candidatos k
+              WHERE k.chain = me.chain AND k.address = me.address
+              ORDER BY k.enviado_at IS NULL, k.primera_mencion LIMIT 1) AS nivel
        FROM tg_mentions me
        JOIN tg_channels c ON c.id = me.channel_id
+       JOIN tg_messages m ON m.id = me.message_id
        LEFT JOIN tokens t ON t.chain = me.chain AND t.address = me.address
       ORDER BY me.posted_at DESC LIMIT 60`,
   );
@@ -145,10 +169,29 @@ export async function renderTelegram(): Promise<string> {
   );
 
   const mensajes = await query<FilaMensaje>(
-    `SELECT m.posted_at, c.title AS canal, m.text, m.triage, m.triage_motivo
+    // Los que pasaron el primer filtro: el resto es ruido y ya se cuenta
+    // arriba. Se ven en espanol, con el original plegado debajo.
+    `SELECT m.posted_at, c.title AS canal, m.text, m.triage, m.triage_motivo,
+            m.clasificacion, m.clasificacion_motivo, m.resumen_es, m.idioma
        FROM tg_messages m JOIN tg_channels c ON c.id = m.channel_id
+      WHERE m.triage = 'candidato'
       ORDER BY m.posted_at DESC LIMIT 40`,
   );
+
+  // De que idioma son los mensajes con informacion de la ultima semana. La
+  // especificacion pide buscar en espanol, portugues e ingles: aqui se ve
+  // si de verdad llega de los tres.
+  const idiomas = await query<{ idioma: string; n: number }>(
+    `SELECT idioma, COUNT(*)::int AS n FROM tg_messages
+      WHERE idioma IS NOT NULL AND posted_at > now() - interval '7 days'
+      GROUP BY idioma`,
+  );
+  const totalIdiomas = idiomas.reduce((a, x) => a + x.n, 0);
+  const pctIdioma = (i: string) =>
+    totalIdiomas > 0 ? Math.round(((idiomas.find((x) => x.idioma === i)?.n ?? 0) / totalIdiomas) * 100) : 0;
+  const mezclaIdiomas = totalIdiomas > 0
+    ? `ES ${pctIdioma('es')}% · PT ${pctIdioma('pt')}% · EN ${pctIdioma('en')}%`
+    : 'sin datos aun';
 
   const pctDescarte =
     resumen.mensajes > 0 ? Math.round((resumen.descartados / resumen.mensajes) * 100) : 0;
@@ -171,7 +214,8 @@ export async function renderTelegram(): Promise<string> {
             const color =
               tasa === null ? 'gray' : tasa >= 50 ? 'green' : tasa >= 25 ? 'yellow' : 'red';
             return `<tr>
-              <td><b>${escapeHtml(f.title ?? f.username ?? 'sin nombre')}</b></td>
+              <td><b>${escapeHtml(f.title ?? f.username ?? 'sin nombre')}</b>
+                  ${f.active ? '' : '<span class="badge gray">ya no se lee</span>'}</td>
               <td class="num">${f.mensajes}</td>
               <td class="num">${f.menciones}</td>
               <td class="num">${f.primeras}</td>
@@ -188,7 +232,9 @@ export async function renderTelegram(): Promise<string> {
           .map(
             (m) => `<tr>
               <td><a href="/token/${m.chain}/${encodeURIComponent(m.address)}"><b>${escapeHtml(m.symbol ?? '?')}</b></a>
-                  ${m.es_primera ? '<span class="badge blue">1a vez</span>' : ''}</td>
+                  ${m.es_primera ? '<span class="badge blue">1a vez</span>' : ''}
+                  ${m.nivel ? `<a href="/convergencia"><span class="badge ${NIVEL[m.nivel]?.color ?? 'gray'}">${NIVEL[m.nivel]?.texto ?? escapeHtml(m.nivel)}</span></a>` : ''}
+                  ${m.resumen_es ? `<div class="small" style="margin-top:3px">${escapeHtml(m.resumen_es)}</div>` : ''}</td>
               <td>${escapeHtml(m.canal ?? '')}</td>
               <td><span class="badge gray">${escapeHtml(m.resuelto_por)}</span></td>
               <td>${minutos(m.anticipacion_seg, m.anticipacion_veredicto)}</td>
@@ -205,11 +251,16 @@ export async function renderTelegram(): Promise<string> {
           .map(
             (m) => `<div style="padding:9px 0;border-bottom:1px solid var(--border)">
               <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                <span class="badge ${m.triage === 'candidato' ? 'green' : 'gray'}">${escapeHtml(m.triage ?? 'pendiente')}</span>
+                <span class="badge ${CLASE_COLOR[m.clasificacion ?? ''] ?? 'blue'}">${escapeHtml(m.clasificacion ?? 'sin clasificar')}</span>
+                ${m.idioma ? `<span class="badge gray">${escapeHtml(m.idioma.toUpperCase())}</span>` : ''}
                 <span class="dim small">${escapeHtml(m.canal ?? '')}</span>
               </div>
-              <div class="small" style="margin-top:4px">${escapeHtml((m.text ?? '').slice(0, 200))}</div>
-              <div class="dim small">${escapeHtml(m.triage_motivo ?? '')}</div>
+              ${m.resumen_es
+                ? `<div class="small" style="margin-top:4px">${escapeHtml(m.resumen_es)}</div>`
+                : ''}
+              <div class="dim small">${escapeHtml(m.clasificacion_motivo ?? m.triage_motivo ?? '')}</div>
+              <details class="small dim" style="margin-top:2px"><summary>Mensaje original</summary>
+                ${escapeHtml((m.text ?? '').slice(0, 600))}</details>
             </div>`,
           )
           .join('');
@@ -224,6 +275,7 @@ export async function renderTelegram(): Promise<string> {
        ${stat('Mensajes', resumen.mensajes.toLocaleString('es-ES'), 'guardados en bruto')}
        ${stat('Descartados', `${pctDescarte}%`, 'ruido filtrado')}
        ${stat('Tokens', resumen.tokens, 'identificados')}
+       ${stat('Idiomas', mezclaIdiomas, 'de lo que informa, ultimos 7 dias')}
      </div>
 
      <h2>Canales encontrados solo</h2>
@@ -301,9 +353,78 @@ export async function renderTelegram(): Promise<string> {
 
      <div class="grid two" style="margin-top:24px">
        <div class="card">
-         <h3>Ultimos mensajes</h3>
+         <h3>Ultimos mensajes con algo que decir</h3>
+         <p class="dim small">Resumidos en espanol. El original, en su idioma, esta plegado debajo.</p>
          ${filasMensajes}
        </div>
      </div>`,
   );
+}
+
+/**
+ * Lo que se dijo de un token en Telegram y lo que decidio el Robot 3, para
+ * la ficha del token.
+ *
+ * Antes la ficha solo ensenaba lo del Robot 1: para saber si de un token se
+ * hablaba en Telegram, y que se decia, habia que ir a otra pestana y
+ * buscarlo. Los tres robots tienen que verse como un solo sistema, y el
+ * sitio natural para juntarlos es la ficha del token.
+ */
+export async function bloqueTelegramToken(chain: string, address: string): Promise<string> {
+  const menciones = await query<{
+    canal: string | null; posted_at: Date; resumen_es: string | null; clasificacion: string | null;
+    anticipacion_seg: number | null; anticipacion_veredicto: string | null; text: string | null;
+  }>(
+    `SELECT c.username AS canal, me.posted_at, m.resumen_es, m.clasificacion,
+            me.anticipacion_seg, me.anticipacion_veredicto, m.text
+       FROM tg_mentions me
+       JOIN tg_messages m ON m.id = me.message_id
+       JOIN tg_channels c ON c.id = me.channel_id
+      WHERE me.chain = $1 AND me.address = $2
+      ORDER BY me.posted_at`,
+    [chain, address],
+  );
+  if (menciones.length === 0) return '';
+
+  const v = await queryOne<{
+    nivel: string; fuentes_indep: number; fuentes_total: number; enviado_at: Date | null;
+    detalle: { contradicciones?: string[]; confirmaciones?: string[] } | null;
+  }>(
+    `SELECT nivel, fuentes_indep, fuentes_total, enviado_at, detalle FROM tg_candidatos
+      WHERE chain = $1 AND address = $2
+      ORDER BY enviado_at IS NULL, primera_mencion LIMIT 1`,
+    [chain, address],
+  );
+
+  const canales = new Set(menciones.map((m) => m.canal ?? '?')).size;
+  const nivel = v ? NIVEL[v.nivel] : null;
+  const comprobado = [
+    ...(v?.detalle?.confirmaciones ?? []).map((c) => `<li style="color:var(--green)">&#10003; ${escapeHtml(c)}</li>`),
+    ...(v?.detalle?.contradicciones ?? []).map((c) => `<li style="color:var(--red)">&#10007; ${escapeHtml(c)}</li>`),
+  ].join('');
+
+  const filas = menciones.slice(-8).reverse().map((m) => `<tr>
+      <td class="small">${m.resumen_es
+        ? escapeHtml(m.resumen_es)
+        : `<span class="dim">${escapeHtml((m.text ?? '').slice(0, 140))}</span>`}
+        ${m.clasificacion ? `<span class="badge ${CLASE_COLOR[m.clasificacion] ?? 'gray'}">${escapeHtml(m.clasificacion)}</span>` : ''}</td>
+      <td class="small">@${escapeHtml(m.canal ?? '?')}</td>
+      <td>${minutos(m.anticipacion_seg, m.anticipacion_veredicto)}</td>
+    </tr>`).join('');
+
+  return `<h2>Telegram y Robot 3</h2>
+    <div class="card">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <b>${menciones.length}</b> menciones en <b>${canales}</b> canal(es)
+        <span class="dim small">· primera ${new Date(menciones[0].posted_at).toLocaleString('es-ES')}</span>
+        ${nivel ? `<a href="/convergencia"><span class="badge ${nivel.color}">Robot 3: ${nivel.texto}</span></a>` : ''}
+        ${v?.enviado_at ? '<span class="badge green">avisado</span>' : ''}
+        ${v ? `<span class="dim small">${v.fuentes_indep} de ${v.fuentes_total} fuentes independientes</span>` : ''}
+      </div>
+      ${comprobado ? `<div class="dim small" style="margin-top:8px">Comprobado contra la cadena</div><ul class="small" style="margin:4px 0 0 18px">${comprobado}</ul>` : ''}
+      <div class="table-wrap" style="margin-top:10px"><table>
+        <thead><tr><th>Lo que dice (en espanol)</th><th>Canal</th><th>Anticipacion</th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table></div>
+    </div>`;
 }

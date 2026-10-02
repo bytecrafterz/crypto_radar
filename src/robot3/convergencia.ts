@@ -20,6 +20,8 @@
  * esta cableado, no es una politica que se pueda ajustar.
  */
 
+import type { Coherencia } from './coherencia.js';
+
 export interface EntradaRobot1 {
   opportunity: number;
   risk: number;
@@ -42,6 +44,11 @@ export interface EntradaRobot2 {
   afirmacionVerificada: boolean;
   /** Tipo de senal dominante. */
   tipoSenal: string;
+  /**
+   * Lo que se comprobo de lo que dicen los mensajes contra la cadena
+   * (coherencia.ts). Sin el, no se comprueba nada.
+   */
+  coherencia?: Coherencia;
 }
 
 export type Nivel = 'descartado' | 'amarillo' | 'naranja' | 'rojo';
@@ -193,12 +200,19 @@ export function decidir(
       `Varias fuentes independientes lo recomiendan pero el riesgo tecnico es ${r1.risk}/100.`,
     );
   }
-  if (r2.tipoSenal === 'negativo' && r1.opportunity > 60) {
+  // Lo que dicen los mensajes que la cadena desmiente. Si la fuente se
+  // equivoca en lo que se puede comprobar, no se le cree en lo demas.
+  const desmentidas = r2.coherencia?.contradichas ?? [];
+  contradicciones.push(...desmentidas);
+  const yaAvisoDeProblema = desmentidas.some((d) => d.includes('avisa de un problema'));
+  if (r2.tipoSenal === 'negativo' && r1.opportunity > 60 && !yaAvisoDeProblema) {
     contradicciones.push(
       'Telegram avisa de algo negativo mientras los datos tecnicos salen bien. ' +
         'Puede ser informacion adelantada que aun no se ve en los numeros.',
     );
   }
+  // Y lo que la cadena confirma, que es la evidencia de verdad.
+  explicacion.push(...(r2.coherencia?.confirmadas ?? []));
   if (r2.anticipacionSeg !== null && r2.anticipacionSeg < 0) {
     explicacion.push(
       'Las fuentes hablaron DESPUES de que el precio se moviera: van detras del mercado.',
@@ -220,7 +234,11 @@ export function decidir(
       `${r2.fuentesIndependientes} fuentes independientes, no copias unas de otras.`,
       `La informacion aparecio ${describirAnticipacion(r2.anticipacionSeg)}.`,
     );
-    if (r2.afirmacionVerificada) explicacion.push('La afirmacion se pudo comprobar.');
+    // Con la coherencia comprobada, las confirmaciones ya estan arriba con
+    // su detalle; la frase generica solo queda para cuando no la hay.
+    if (r2.afirmacionVerificada && !r2.coherencia?.confirmadas.length) {
+      explicacion.push('La afirmacion se pudo comprobar.');
+    }
     return {
       nivel: 'rojo',
       componentes,

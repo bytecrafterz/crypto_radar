@@ -626,27 +626,70 @@ export async function abandonarTardios(): Promise<number> {
 
   let fuera = 0;
   for (const m of malos) {
-    if (await salir(m.username)) {
-      await exec(
-        `UPDATE tg_canales_descubiertos
-            SET estado = 'abandonado',
-                motivo_estado = 'siempre llega despues del movimiento',
-                revisado_at = now()
-          WHERE id = $1`,
-        [m.id],
-      );
-      await dejarDeLeer(m.username);
-      await exec(
-        `INSERT INTO tg_uniones (canal_id, username, accion, resultado, detalle)
-         VALUES ($1, $2, 'salida', 'ok', $3)`,
-        [m.id, m.username, `${m.medidas} menciones medidas y ninguna antes del movimiento`],
-      );
-      fuera++;
-    }
+    const ok = await abandonar(
+      m.id, m.username, 'siempre llega despues del movimiento',
+      `${m.medidas} menciones medidas y ninguna antes del movimiento`,
+    );
+    if (ok) fuera++;
     await pausa(PAUSA_MS);
   }
 
   if (fuera > 0) log.info({ fuera }, 'canales abandonados por llegar siempre tarde');
+  return fuera;
+}
+
+/** Sale de un canal descubierto y deja constancia de por que. */
+async function abandonar(id: number, username: string, motivo: string, detalle: string): Promise<boolean> {
+  if (!(await salir(username))) return false;
+  await exec(
+    `UPDATE tg_canales_descubiertos
+        SET estado = 'abandonado', motivo_estado = $2, revisado_at = now()
+      WHERE id = $1`,
+    [id, motivo],
+  );
+  await dejarDeLeer(username);
+  await exec(
+    `INSERT INTO tg_uniones (canal_id, username, accion, resultado, detalle)
+     VALUES ($1, $2, 'salida', 'ok', $3)`,
+    [id, username, detalle],
+  );
+  return true;
+}
+
+/**
+ * Abandona canales que escriben casi siempre en otro idioma.
+ *
+ * La especificacion pide fuentes en espanol, portugues e ingles. El titulo
+ * ya filtra los evidentes antes de entrar (otro alfabeto), pero hay canales
+ * con titulo en ingles que publican en otro idioma, y solo se ve dentro. El
+ * idioma de cada mensaje lo dice el clasificador.
+ */
+export async function abandonarOtroIdioma(): Promise<number> {
+  const malos = await query<{ id: number; username: string; total: number; buenos: number }>(
+    `SELECT d.id, d.username, COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE m.idioma IN ('es', 'pt', 'en'))::int AS buenos
+       FROM tg_canales_descubiertos d
+       JOIN tg_channels c  ON lower(c.username) = lower(d.username)
+       JOIN tg_messages m  ON m.channel_id = c.id AND m.idioma IS NOT NULL
+      WHERE d.estado = 'unido'
+        AND d.unido_at < now() - interval '3 days'
+      GROUP BY d.id, d.username
+     HAVING COUNT(*) >= 8
+        AND COUNT(*) FILTER (WHERE m.idioma IN ('es', 'pt', 'en')) < COUNT(*) * 0.3
+      LIMIT 2`,
+  );
+
+  let fuera = 0;
+  for (const m of malos) {
+    const ok = await abandonar(
+      m.id, m.username, 'escribe en otro idioma',
+      `${m.total - m.buenos} de ${m.total} mensajes fuera de espanol, portugues e ingles`,
+    );
+    if (ok) fuera++;
+    await pausa(PAUSA_MS);
+  }
+
+  if (fuera > 0) log.info({ fuera }, 'canales abandonados por escribir en otro idioma');
   return fuera;
 }
 
@@ -663,10 +706,11 @@ export async function runDescubrimiento(): Promise<{
   const abandonados = await abandonarInutiles();
   const publicitarios = await abandonarSoloPublicidad();
   const tardios = await abandonarTardios();
+  const otroIdioma = await abandonarOtroIdioma();
   const desactivados = await desactivarAbandonados();
   if (desactivados > 0) log.info({ desactivados }, 'canales abandonados que se seguian leyendo, ya no');
 
-  const r = { buscados, enlaces, unidos, abandonados: abandonados + publicitarios + tardios };
+  const r = { buscados, enlaces, unidos, abandonados: abandonados + publicitarios + tardios + otroIdioma };
   if (buscados + enlaces + unidos + abandonados > 0) {
     log.info(r, 'vuelta de descubrimiento');
   }

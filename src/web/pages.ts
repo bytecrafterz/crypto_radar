@@ -1,6 +1,8 @@
 /**
  * Paginas del panel web.
  */
+import { renderAciertoRobot3 } from './robot3-page.js';
+import { bloqueTelegramToken } from './telegram-page.js';
 import { query, getState } from '../core/db.js';
 import { estadoDeLasTareas } from '../worker/vigilante.js';
 import * as repo from '../core/repo.js';
@@ -285,7 +287,7 @@ export async function renderTokenDetail(chain: string, address: string): Promise
   const token = await repo.getToken(chain as StoredToken['chain'], address);
   if (!token) return null;
 
-  const [security, holders, deployer, score, suspicious, series, horizons, secChanges] = await Promise.all([
+  const [security, holders, deployer, score, suspicious, series, horizons, secChanges, telegram] = await Promise.all([
     repo.getLatestSecurity(token.id),
     repo.getLatestHolders(token.id),
     repo.getLatestDeployer(token.id),
@@ -294,6 +296,7 @@ export async function renderTokenDetail(chain: string, address: string): Promise
     repo.getSnapshotSeries(token.id, 72),
     tracking.getHorizons(token.id),
     tracking.getSecurityChanges(token.id),
+    bloqueTelegramToken(token.chain, token.address),
   ]);
 
   const opReasons = (score?.opportunity_reasons ?? []) as Array<{ text: string; points: number }>;
@@ -493,6 +496,8 @@ export async function renderTokenDetail(chain: string, address: string): Promise
          : ''
      }
 
+     ${telegram}
+
      ${
        horizons.length > 0
          ? `<h2>Que paso despues</h2>
@@ -604,6 +609,7 @@ export async function renderAlerts(): Promise<string> {
 // --------------------------------------------------------------------------
 
 export async function renderResults(): Promise<string> {
+  const aciertoRobot3 = await renderAciertoRobot3();
   const [outcomes, byScore, best] = await Promise.all([
     query<{ outcome: string; count: number; avg_peak: number | null }>(
       `SELECT outcome, COUNT(*)::int AS count, AVG(peak_multiple) AS avg_peak
@@ -803,6 +809,8 @@ export async function renderResults(): Promise<string> {
          <tbody>${bucketRows}</tbody>
        </table>
      </div>
+
+     ${aciertoRobot3}
 
      <h2>Los que mas subieron</h2>
      <div class="table-wrap">

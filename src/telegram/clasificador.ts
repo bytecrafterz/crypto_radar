@@ -43,37 +43,81 @@ const INTENTOS_MAXIMOS = 3;
 export type Clase = 'informacion' | 'promocion' | 'hype' | 'indeterminado';
 
 const INSTRUCCION = `Eres un filtro de mensajes de canales de criptomonedas.
+Los mensajes pueden venir en espanol, portugues o ingles.
 
-Tu unico trabajo es decidir si un mensaje aporta INFORMACION comprobable
-sobre un token o si es PUBLICIDAD disfrazada de informacion.
+Tu trabajo es decidir si un mensaje aporta INFORMACION comprobable sobre
+un token o si es PUBLICIDAD disfrazada de informacion, y resumir en
+espanol lo que afirma.
 
 Responde SOLO con un JSON, sin nada mas alrededor:
-{"clase":"informacion|promocion|hype","confianza":85,"motivo":"breve"}
+{"clase":"informacion|promocion|hype","confianza":85,"motivo":"breve",
+ "idioma":"es|pt|en|otro","tipo":"listing|lanzamiento|partnership|whale|negativo|llamada|general",
+ "resumen":"una frase en espanol","afirmaciones":["liquidez_bloqueada"]}
 
 La confianza es un numero ENTERO entre 0 y 100. No uses decimales.
 
+clase:
 informacion: dice algo concreto y comprobable. Un listado, una auditoria,
   liquidez bloqueada con plazo, un movimiento de una cartera grande, un
   desbloqueo, un contrato con datos verificables, una advertencia de
   estafa. Que este bien o mal escrito da igual.
-
 promocion: promociona un token en concreto usando lenguaje de venta.
   Urgencia, promesas de multiplicar, "entra ya", "no te lo pierdas",
-  enlaces de referido. Puede incluir datos reales, pero el proposito es
-  que compres, no que sepas.
-
+  "compre agora", "nao perca", enlaces de referido. Puede incluir datos
+  reales, pero el proposito es que compres, no que sepas.
 hype: entusiasmo sin nada concreto. Emojis, "to the moon", "gema", sin
   ningun dato que se pueda comprobar.
-
 Ante la duda entre informacion y promocion, elige promocion: es peor
 tratar publicidad como informacion que al reves.
 
+idioma: el idioma del mensaje.
+
+tipo: listing (lo listan en un exchange), lanzamiento (token nuevo o
+  preventa), partnership (alianza o acuerdo), whale (compra o venta de
+  una cartera grande), negativo (aviso de estafa, rug, honeypot, el
+  equipo vendio, liquidez retirada), llamada (recomendacion de compra
+  sin mas), general (nada de lo anterior).
+
+resumen: UNA frase en espanol, de menos de 25 palabras, con lo que el
+  mensaje afirma del token. Sin opinar ni repetir el lenguaje de venta.
+  Ejemplo: "Afirma que la liquidez esta bloqueada 6 meses y que el
+  contrato esta renunciado."
+
+afirmaciones: solo las que el mensaje dice EXPRESAMENTE, de esta lista:
+  liquidez_bloqueada (LP bloqueada o quemada),
+  sin_permisos (mint o freeze revocados, contrato renunciado, sin owner),
+  sin_impuestos (0% de impuesto o "no tax"),
+  no_honeypot (dice que se puede vender, "not a honeypot"),
+  advertencia (avisa de estafa, rug, honeypot, que el equipo vendio o que
+  retiraron la liquidez).
+  Lista vacia si no dice ninguna.
+
 El motivo, en espanol y en menos de quince palabras.`;
+
+export type Afirmacion =
+  | 'liquidez_bloqueada' | 'sin_permisos' | 'sin_impuestos' | 'no_honeypot' | 'advertencia';
+
+export const AFIRMACIONES: readonly Afirmacion[] = [
+  'liquidez_bloqueada', 'sin_permisos', 'sin_impuestos', 'no_honeypot', 'advertencia',
+];
+
+export type TipoSenal =
+  | 'listing' | 'lanzamiento' | 'partnership' | 'whale' | 'negativo' | 'llamada' | 'general';
+
+const TIPOS: readonly TipoSenal[] = [
+  'listing', 'lanzamiento', 'partnership', 'whale', 'negativo', 'llamada', 'general',
+];
 
 export interface Veredicto {
   clase: Clase;
   confianza: number;
   motivo: string;
+  /** es | pt | en | otro, o null si el modelo no lo dijo. */
+  idioma: string | null;
+  tipo: TipoSenal;
+  /** Lo que afirma el mensaje, en espanol. null si el modelo no lo dio. */
+  resumen: string | null;
+  afirmaciones: Afirmacion[];
 }
 
 /**
@@ -99,12 +143,26 @@ export function leerRespuesta(texto: string | null): Veredicto | null {
     // Sin esto, un 98 por ciento de confianza se guardaba como un 1.
     if (Number.isFinite(confianza) && confianza > 0 && confianza <= 1) confianza *= 100;
 
+    const idioma = String(j.idioma ?? '').toLowerCase().slice(0, 5);
+    const tipo = String(j.tipo ?? '').toLowerCase() as TipoSenal;
+    const resumen = String(j.resumen ?? '').trim().slice(0, 300);
+    // Solo se aceptan afirmaciones de la lista: lo que el modelo invente
+    // fuera de ella no se puede comprobar contra la cadena.
+    const afirmaciones = Array.isArray(j.afirmaciones)
+      ? [...new Set(j.afirmaciones.map((x) => String(x).toLowerCase()))]
+          .filter((x): x is Afirmacion => (AFIRMACIONES as readonly string[]).includes(x))
+      : [];
+
     return {
       clase: clase as Clase,
       // Una confianza que no viene o viene rara no puede tomarse por
       // buena: se queda en la mitad, que no inclina la decision.
       confianza: Number.isFinite(confianza) ? Math.max(0, Math.min(100, Math.round(confianza))) : 50,
       motivo: String(j.motivo ?? '').slice(0, 200),
+      idioma: ['es', 'pt', 'en', 'otro'].includes(idioma) ? idioma : null,
+      tipo: (TIPOS as readonly string[]).includes(tipo) ? tipo : 'general',
+      resumen: resumen || null,
+      afirmaciones,
     };
   } catch {
     return null;
@@ -116,12 +174,32 @@ export async function clasificar(texto: string): Promise<Veredicto | null> {
   if (!hayModelo()) return null;
   // Mensajes larguisimos se recortan: el principio ya dice de que va, y
   // pagar por leer mil lineas de firma no aporta nada.
-  const respuesta = await preguntar(INSTRUCCION, texto.slice(0, 1500), 800);
+  const respuesta = await preguntar(INSTRUCCION, texto.slice(0, 1500), 1000);
   return leerRespuesta(respuesta);
+}
+
+/** Guarda lo que dijo el modelo sobre un mensaje y sobre sus menciones. */
+async function guardar(id: number, v: Veredicto): Promise<void> {
+  await exec(
+    `UPDATE tg_messages
+        SET clasificacion = $2, clasificacion_motivo = $3,
+            clasificacion_confianza = $4, clasificado_at = now(),
+            idioma = $5, tipo_senal = $6, resumen_es = $7, afirmaciones = $8
+      WHERE id = $1`,
+    [id, v.clase, v.motivo, v.confianza, v.idioma, v.tipo, v.resumen, JSON.stringify(v.afirmaciones)],
+  );
+  // El tipo de senal va tambien a las menciones, que es donde lo lee el
+  // Robot 3. Antes nadie lo escribia: valia siempre "general", y las
+  // reglas del Robot 3 que dependen de el no se activaban nunca.
+  await exec('UPDATE tg_mentions SET tipo_senal = $2 WHERE message_id = $1', [id, v.tipo]);
 }
 
 /**
  * Clasifica los mensajes que pasaron las reglas y aun no se han mirado.
+ *
+ * Si sobra hueco en la vuelta, se rellena el resumen en espanol de los ya
+ * clasificados en los ultimos dias que aun no lo tienen (los de antes de
+ * que existiera). Lo nuevo va siempre primero.
  */
 export async function runClasificador(): Promise<number> {
   if (!hayModelo()) return 0;
@@ -140,13 +218,7 @@ export async function runClasificador(): Promise<number> {
     const v = await clasificar(m.text);
 
     if (v) {
-      await exec(
-        `UPDATE tg_messages
-            SET clasificacion = $2, clasificacion_motivo = $3,
-                clasificacion_confianza = $4, clasificado_at = now()
-          WHERE id = $1`,
-        [m.id, v.clase, v.motivo, v.confianza],
-      );
+      await guardar(m.id, v);
       hechos++;
       continue;
     }
@@ -169,10 +241,32 @@ export async function runClasificador(): Promise<number> {
       // El proveedor esta fallando ahora mismo: insistir con los demas de
       // esta vuelta solo gasta intentos. Se corta y se sigue en la
       // siguiente.
-      break;
+      if (hechos > 0) log.info({ clasificados: hechos }, 'vuelta del clasificador');
+      return hechos;
     }
   }
 
-  if (hechos > 0) log.info({ clasificados: hechos }, 'vuelta del clasificador');
-  return hechos;
+  // Hueco sobrante: resumen de lo clasificado antes de que hubiera resumen.
+  const hueco = POR_VUELTA - pendientes.length;
+  let resumidos = 0;
+  if (hueco > 0) {
+    const atrasados = await query<{ id: number; text: string }>(
+      `SELECT id, text FROM tg_messages
+        WHERE clasificado_at IS NOT NULL AND resumen_es IS NULL AND text IS NOT NULL
+          AND clasificacion <> 'indeterminado'
+          AND posted_at > now() - interval '3 days'
+        ORDER BY posted_at DESC
+        LIMIT $1`,
+      [hueco],
+    );
+    for (const m of atrasados) {
+      const v = await clasificar(m.text);
+      if (!v) break;
+      await guardar(m.id, v);
+      resumidos++;
+    }
+  }
+
+  if (hechos + resumidos > 0) log.info({ clasificados: hechos, resumidos }, 'vuelta del clasificador');
+  return hechos + resumidos;
 }

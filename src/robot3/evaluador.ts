@@ -8,20 +8,27 @@
  *
  * QUE HACE
  * Cuando el Robot 2 identifica un token, aqui se reune todo lo que se
- * sabe de el por los dos lados, se pide el veredicto al motor de
+ * sabe de el por los dos lados, se comprueba que lo que dicen los
+ * mensajes cuadra con la cadena, se pide el veredicto al motor de
  * convergencia y, solo si el nivel es el mas alto, se envia un aviso.
+ * Mientras el token siga vigilado, el veredicto se revisa y cada cambio de
+ * nivel queda apuntado.
  *
  * LA ALERTA VA EN ESPANOL aunque el mensaje original estuviera en ingles
- * o portugues, que es lo que pedia la especificacion.
+ * o portugues, que es lo que pedia la especificacion: lo que dice
+ * Telegram llega resumido en espanol.
  */
 import { query, queryOne, exec } from '../core/db.js';
 import { child } from '../core/logger.js';
 import { notify } from '../worker/notify.js';
 import { isPaused } from '../worker/telegram.js';
 import { saveAlert } from '../core/repo.js';
+import { escapeHtml } from '../core/util.js';
 import { decidir, describirAnticipacion, type EntradaRobot1, type EntradaRobot2 } from './convergencia.js';
+import { verificarCoherencia, type HechosCadena } from './coherencia.js';
 import { contarFuentes, type MencionFuente } from './fuentes.js';
 import { umbralesActuales, avisosPorDia } from './umbrales.js';
+import { AFIRMACIONES, type Afirmacion } from '../telegram/clasificador.js';
 import type { Chain } from '../core/types.js';
 
 const log = child('robot3');
@@ -41,6 +48,20 @@ interface DatosMencion {
   primeraMencion: Date;
 }
 
+/** Lo que dice un mensaje, resumido en espanol. */
+export interface ResumenMensaje {
+  texto: string;
+  canal: string | null;
+  clase: string | null;
+}
+
+/**
+ * Tipo de senal que manda cuando los mensajes dicen cosas distintas.
+ * Un aviso negativo va por delante de todo; antes se cogia el "mayor"
+ * por orden alfabetico, y "whale" le ganaba a "negativo".
+ */
+const PRIORIDAD_TIPO = ['negativo', 'listing', 'lanzamiento', 'partnership', 'whale', 'llamada', 'general'];
+
 /**
  * Reune lo que sabe el Robot 2 sobre un token.
  *
@@ -48,7 +69,10 @@ interface DatosMencion {
  * las que se estan copiando. Como se cuentan esta en fuentes.ts: son
  * canales que publicaron algo por su cuenta, no textos distintos.
  */
-async function reunirSenalSocial(chain: string, address: string): Promise<EntradaRobot2 | null> {
+async function reunirSenalSocial(
+  chain: string,
+  address: string,
+): Promise<{ r2: EntradaRobot2; afirmaciones: Afirmacion[]; resumenes: ResumenMensaje[] } | null> {
   const menciones = await query<MencionFuente>(
     `SELECT me.channel_id AS canal, m.text_hash AS hash, m.id AS mensaje, m.posted_at AS publicado,
             -- Una promocion pagada NO es una fuente independiente por
@@ -72,13 +96,12 @@ async function reunirSenalSocial(chain: string, address: string): Promise<Entrad
   if (menciones.length === 0) return null;
 
   const f = await queryOne<{
-    con_informacion: number | null;
     anticipacion: number | null;
     reputacion: number | null;
-    tipo: string | null;
+    tipos: string[] | null;
+    afirmaciones: string[] | null;
   }>(
-    `SELECT COUNT(*) FILTER (WHERE m.clasificacion = 'informacion')::int AS con_informacion,
-            -- Solo las menciones tras las que hubo movimiento. "No se
+    `SELECT -- Solo las menciones tras las que hubo movimiento. "No se
             -- movio" y "sin datos" se guardaban como 0 segundos, y ese 0
             -- puntuaba como la anticipacion perfecta.
             AVG(me.anticipacion_seg) FILTER (
@@ -94,49 +117,85 @@ async function reunirSenalSocial(chain: string, address: string): Promise<Entrad
               WHERE s.tasa_utiles IS NOT NULL
                 AND s.channel_id IN (SELECT channel_id FROM tg_mentions
                                       WHERE chain = $1 AND address = $2)) AS reputacion,
-            MAX(me.tipo_senal)                                        AS tipo
+            ARRAY_AGG(DISTINCT me.tipo_senal) FILTER (WHERE me.tipo_senal IS NOT NULL) AS tipos,
+            (SELECT ARRAY_AGG(DISTINCT a)
+               FROM tg_mentions me2
+               JOIN tg_messages m2 ON m2.id = me2.message_id,
+                    jsonb_array_elements_text(COALESCE(m2.afirmaciones, '[]'::jsonb)) a
+              WHERE me2.chain = $1 AND me2.address = $2) AS afirmaciones
        FROM tg_mentions me
-       JOIN tg_messages m       ON m.id = me.message_id
       WHERE me.chain = $1 AND me.address = $2`,
     [chain, address],
   );
   if (!f) return null;
 
+  // Lo que dicen los mensajes, en espanol. Un resumen por texto distinto
+  // (las copias dicen lo mismo), primero los informativos.
+  const resumenes = await query<ResumenMensaje>(
+    `SELECT texto, canal, clase FROM (
+       SELECT DISTINCT ON (COALESCE(m.text_hash, m.id::text))
+              m.resumen_es AS texto, c.username AS canal, m.clasificacion AS clase,
+              m.clasificacion_confianza AS confianza, m.posted_at
+         FROM tg_mentions me
+         JOIN tg_messages m ON m.id = me.message_id
+         JOIN tg_channels c ON c.id = me.channel_id
+        WHERE me.chain = $1 AND me.address = $2 AND m.resumen_es IS NOT NULL
+        ORDER BY COALESCE(m.text_hash, m.id::text), m.posted_at
+     ) x
+     ORDER BY (clase = 'informacion') DESC, confianza DESC NULLS LAST, posted_at
+     LIMIT 3`,
+    [chain, address],
+  );
+
   const fuentes = contarFuentes(menciones);
+  const tipos = f.tipos ?? [];
+  const tipo = PRIORIDAD_TIPO.find((t) => tipos.includes(t)) ?? 'general';
+  const afirmaciones = (f.afirmaciones ?? [])
+    .filter((a): a is Afirmacion => (AFIRMACIONES as readonly string[]).includes(a));
 
   return {
-    fuentesTotal: fuentes.total,
-    // Si el clasificador esta puesto, solo cuentan los canales que
-    // informan. Sin clasificador, clasificacion es NULL y todo es util.
-    //
-    // OJO CON EL SUELO DE 1
-    // Aqui habia un Math.max(1, ...) heredado de cuando no existia el
-    // clasificador, y deshacia su trabajo entero: un token del que solo
-    // hablaban promociones pagadas se guardaba con UNA fuente
-    // independiente en vez de con ninguna, y con eso le bastaba para
-    // llegar a "convergencia". Cero fuentes utiles son cero, y ese token
-    // no tiene que subir de nivel.
-    fuentesIndependientes: fuentes.independientes,
-    anticipacionSeg: f.anticipacion,
-    reputacionMedia: f.reputacion ?? 0,
-    // Ahora si se puede afirmar algo: hay al menos un mensaje que el
-    // clasificador dio por informacion comprobable y no por publicidad.
-    // Sin clasificador sigue siendo false, que es lo prudente.
-    afirmacionVerificada: (f.con_informacion ?? 0) > 0,
-    tipoSenal: f.tipo ?? 'general',
+    r2: {
+      fuentesTotal: fuentes.total,
+      // Si el clasificador esta puesto, solo cuentan los canales que
+      // informan. Sin clasificador, clasificacion es NULL y todo es util.
+      //
+      // OJO CON EL SUELO DE 1
+      // Aqui habia un Math.max(1, ...) heredado de cuando no existia el
+      // clasificador, y deshacia su trabajo entero: un token del que solo
+      // hablaban promociones pagadas se guardaba con UNA fuente
+      // independiente en vez de con ninguna, y con eso le bastaba para
+      // llegar a "convergencia". Cero fuentes utiles son cero, y ese token
+      // no tiene que subir de nivel.
+      fuentesIndependientes: fuentes.independientes,
+      anticipacionSeg: f.anticipacion,
+      reputacionMedia: f.reputacion ?? 0,
+      // Se decide en evaluar(), al comprobar las afirmaciones contra la
+      // cadena. Antes bastaba con que un mensaje "pareciera" informativo.
+      afirmacionVerificada: false,
+      tipoSenal: tipo,
+    },
+    afirmaciones,
+    resumenes,
   };
 }
 
 /** Lo que dice el Robot 1, leido de lo que ya guardo al analizar. */
-async function reunirSenalTecnica(chain: string, address: string): Promise<EntradaRobot1 | null> {
+async function reunirSenalTecnica(
+  chain: string,
+  address: string,
+): Promise<{ r1: EntradaRobot1; hechos: HechosCadena; precio: number | null } | null> {
   const t = await queryOne<{
     id: number;
     symbol: string | null;
     last_opportunity: number | null;
     last_risk: number | null;
+    last_price_usd: number | null;
     enriched_at: Date | null;
+    invalidated_at: Date | null;
+    invalidation_reason: string | null;
   }>(
-    `SELECT id, symbol, last_opportunity, last_risk, enriched_at
+    `SELECT id, symbol, last_opportunity, last_risk, last_price_usd, enriched_at,
+            invalidated_at, invalidation_reason
        FROM tokens WHERE chain = $1 AND address = $2`,
     [chain, address],
   );
@@ -154,20 +213,97 @@ async function reunirSenalTecnica(chain: string, address: string): Promise<Entra
     [t.id],
   );
 
-  const riesgos = await query<{ detail: string }>(
-    `SELECT detail FROM suspicious_events
+  const riesgos = await query<{ detail: string; severity: string }>(
+    `SELECT detail, severity FROM suspicious_events
       WHERE token_id = $1 AND severity IN ('danger','warn')
-      ORDER BY ts DESC LIMIT 4`,
+      ORDER BY ts DESC LIMIT 6`,
     [t.id],
   );
 
-  return {
+  const sec = await queryOne<{
+    mint_authority_active: boolean | null;
+    freeze_authority_active: boolean | null;
+    owner_can_modify: boolean | null;
+    has_mint_function: boolean | null;
+    has_blacklist: boolean | null;
+    buy_tax_pct: number | null;
+    sell_tax_pct: number | null;
+    is_honeypot: boolean | null;
+    can_sell: boolean | null;
+    lp_locked_pct: number | null;
+    lp_burned_pct: number | null;
+  }>(
+    `SELECT mint_authority_active, freeze_authority_active, owner_can_modify, has_mint_function,
+            has_blacklist, buy_tax_pct, sell_tax_pct, is_honeypot, can_sell,
+            lp_locked_pct, lp_burned_pct
+       FROM security_reports WHERE token_id = $1 ORDER BY ts DESC LIMIT 1`,
+    [t.id],
+  );
+
+  // Una oportunidad que el seguimiento ya dio por perdida (liquidez
+  // retirada, desplome) cuenta como vetada. Antes el Robot 3 no lo miraba
+  // y podia seguir dandole nivel con la nota de cuando aun estaba sana.
+  const vetos = (s?.critical_vetoes ?? []).map((v) => v.text);
+  const invalidado = t.invalidated_at !== null;
+  if (invalidado) vetos.unshift(`Oportunidad invalidada: ${t.invalidation_reason ?? 'sin motivo'}`);
+
+  const r1: EntradaRobot1 = {
     opportunity: Number(t.last_opportunity),
     risk: Number(t.last_risk),
-    vetoed: s?.vetoed ?? false,
+    vetoed: (s?.vetoed ?? false) || invalidado,
     evaluable: s?.evaluable ?? true,
-    vetos: (s?.critical_vetoes ?? []).map((v) => v.text),
-    motivosRiesgo: riesgos.map((r) => r.detail),
+    vetos,
+    motivosRiesgo: riesgos.slice(0, 4).map((r) => r.detail),
+  };
+
+  return { r1, hechos: hechosDe(chain, sec, riesgos, r1.vetoed), precio: t.last_price_usd };
+}
+
+/** Traduce el informe de seguridad del Robot 1 a lo que se puede comprobar. */
+function hechosDe(
+  chain: string,
+  sec: {
+    mint_authority_active: boolean | null; freeze_authority_active: boolean | null;
+    owner_can_modify: boolean | null; has_mint_function: boolean | null; has_blacklist: boolean | null;
+    buy_tax_pct: number | null; sell_tax_pct: number | null; is_honeypot: boolean | null;
+    can_sell: boolean | null; lp_locked_pct: number | null; lp_burned_pct: number | null;
+  } | null,
+  riesgos: Array<{ detail: string; severity: string }>,
+  vetado: boolean,
+): HechosCadena {
+  const peligros = riesgos.filter((r) => r.severity === 'danger').map((r) => r.detail);
+  if (!sec) {
+    return {
+      liquidezAseguradaPct: null, permisosLimpios: null, impuestoMaxPct: null,
+      honeypot: null, peligros, vetado,
+    };
+  }
+
+  const bloqueada = sec.lp_locked_pct === null ? null : Number(sec.lp_locked_pct);
+  const quemada = sec.lp_burned_pct === null ? null : Number(sec.lp_burned_pct);
+  const liquidezAseguradaPct =
+    bloqueada === null && quemada === null ? null : Math.min(100, (bloqueada ?? 0) + (quemada ?? 0));
+
+  // En Solana el poder esta en las autoridades de mint y freeze; en Base,
+  // en el owner del contrato. Si no se pudo ver ninguna, no se sabe.
+  const permisos = chain === 'solana'
+    ? [sec.mint_authority_active, sec.freeze_authority_active]
+    : [sec.owner_can_modify, sec.has_mint_function, sec.has_blacklist];
+  const conocidos = permisos.filter((p): p is boolean => p !== null);
+  const permisosLimpios = conocidos.length === 0 ? null : !conocidos.some(Boolean);
+
+  const impuestos = [sec.buy_tax_pct, sec.sell_tax_pct].filter((x): x is number => x !== null).map(Number);
+  const honeypot = sec.is_honeypot === true || sec.can_sell === false
+    ? true
+    : sec.is_honeypot === false || sec.can_sell === true ? false : null;
+
+  return {
+    liquidezAseguradaPct,
+    permisosLimpios,
+    impuestoMaxPct: impuestos.length > 0 ? Math.max(...impuestos) : null,
+    honeypot,
+    peligros,
+    vetado,
   };
 }
 
@@ -186,6 +322,7 @@ export function construirAviso(
   r1: EntradaRobot1,
   r2: EntradaRobot2,
   v: ReturnType<typeof decidir>,
+  resumenes: ResumenMensaje[] = [],
 ): string {
   const enlace =
     d.chain === 'solana'
@@ -193,23 +330,33 @@ export function construirAviso(
       : `https://app.uniswap.org/swap?chain=base&outputCurrency=${d.address}`;
 
   const anticipacion = describirAnticipacion(r2.anticipacionSeg);
+  const confirmadas = r2.coherencia?.confirmadas ?? [];
 
   return [
-    `🚨 <b>ALTA CONVERGENCIA · ${d.symbol ?? '?'}</b>`,
+    `🚨 <b>ALTA CONVERGENCIA · ${escapeHtml(d.symbol ?? '?')}</b>`,
     `${d.chain === 'solana' ? 'Solana' : 'Base'}`,
     '',
     '<b>Lo que dice Telegram</b>',
     `${r2.fuentesIndependientes} fuente(s) independiente(s) de ${r2.fuentesTotal} en total`,
     `La informacion aparecio ${anticipacion}`,
+    // Lo que dicen los mensajes, resumido en espanol aunque el original
+    // estuviera en ingles o portugues.
+    ...resumenes.slice(0, 2).map(
+      (r) => `• ${escapeHtml(r.texto)}${r.canal ? ` <i>(@${escapeHtml(r.canal)})</i>` : ''}`,
+    ),
     '',
     '<b>Lo que dicen los datos</b>',
     `Oportunidad ${r1.opportunity}/100   Riesgo ${r1.risk}/100`,
+    ...(confirmadas.length > 0
+      ? ['', '<b>Comprobado en la cadena</b>', ...confirmadas.map((c) => `✅ ${escapeHtml(c)}`)]
+      : []),
     ...(r1.motivosRiesgo.length > 0
-      ? ['', '<b>Riesgos detectados</b>', ...r1.motivosRiesgo.slice(0, 3).map((m) => `• ${m}`)]
+      ? ['', '<b>Riesgos detectados</b>', ...r1.motivosRiesgo.slice(0, 3).map((m) => `• ${escapeHtml(m)}`)]
       : []),
     '',
     '<b>Por que se avisa</b>',
-    ...v.explicacion.map((e) => `• ${e}`),
+    // Las confirmaciones ya van en su apartado.
+    ...v.explicacion.filter((e) => !confirmadas.includes(e)).map((e) => `• ${escapeHtml(e)}`),
     '',
     `👉 <b><a href="${enlace}">COMPRAR ESTE TOKEN</a></b>`,
     '<i>Este enlace lleva la direccion correcta. No busques el token por su nombre.</i>',
@@ -233,13 +380,23 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
   );
   if ((avisado?.n ?? 0) > 0) return;
 
-  const r2 = await reunirSenalSocial(chain, address);
-  if (!r2) return;
+  const social = await reunirSenalSocial(chain, address);
+  if (!social) return;
 
-  const r1 = await reunirSenalTecnica(chain, address);
+  const tecnica = await reunirSenalTecnica(chain, address);
   // Sin analisis del Robot 1 no hay nada que cruzar. No se avisa: la
   // mitad de la informacion no es informacion.
-  if (!r1) return;
+  if (!tecnica) return;
+  const { r1, hechos, precio } = tecnica;
+
+  // COHERENCIA: lo que afirman los mensajes, contra lo que dice la cadena.
+  // Lo desmentido impide el nivel maximo; lo confirmado es la evidencia.
+  const coherencia = verificarCoherencia(social.afirmaciones, hechos);
+  const r2: EntradaRobot2 = {
+    ...social.r2,
+    coherencia,
+    afirmacionVerificada: coherencia.confirmadas.length > 0,
+  };
 
   const t = await queryOne<{ id: number; symbol: string | null }>(
     'SELECT id, symbol FROM tokens WHERE chain = $1 AND address = $2',
@@ -274,6 +431,22 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
     [chain, address, primeraMencion],
   );
 
+  // Nivel que tenia, para saber si cambia.
+  const antes = await queryOne<{ nivel: string | null }>(
+    'SELECT nivel FROM tg_candidatos WHERE chain = $1 AND address = $2 AND primera_mencion = $3',
+    [chain, address, primeraMencion],
+  );
+
+  // Todo el razonamiento se guarda con el veredicto, se avise o no. Antes
+  // solo viajaba en el aviso: de lo que no se avisaba no quedaba por que.
+  const detalle = {
+    motivo: veredicto.motivo,
+    explicacion: veredicto.explicacion,
+    contradicciones: veredicto.contradicciones,
+    confirmaciones: coherencia.confirmadas,
+    resumenes: social.resumenes,
+  };
+
   // Se guarda SIEMPRE, avise o no. Los descartados son justamente lo que
   // hace falta para comprobar mas adelante si el sistema acertaba.
   //
@@ -292,8 +465,8 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
     `INSERT INTO tg_candidatos
        (chain, address, primera_mencion, fuentes_total, fuentes_indep, anticipacion_seg,
         score_social, score_fuentes, score_evidencia, score_tecnica, score_riesgo,
-        vetado, nivel)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        vetado, nivel, detalle)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
      ON CONFLICT (chain, address, primera_mencion) DO UPDATE SET
        fuentes_total    = EXCLUDED.fuentes_total,
        fuentes_indep    = EXCLUDED.fuentes_indep,
@@ -304,7 +477,8 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
        score_tecnica    = EXCLUDED.score_tecnica,
        score_riesgo     = EXCLUDED.score_riesgo,
        vetado           = EXCLUDED.vetado,
-       nivel            = EXCLUDED.nivel
+       nivel            = EXCLUDED.nivel,
+       detalle          = EXCLUDED.detalle
      WHERE tg_candidatos.enviado_at IS NULL
      RETURNING id`,
     [
@@ -318,9 +492,25 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
       Math.round(veredicto.componentes.evidencia),
       Math.round(veredicto.componentes.tecnica),
       Math.round(veredicto.componentes.riesgo),
-      r1.vetoed, veredicto.nivel,
+      r1.vetoed, veredicto.nivel, JSON.stringify(detalle),
     ],
   );
+
+  // SEGUIMIENTO: cada cambio de nivel queda apuntado con su precio. Es lo
+  // que deja ver como evoluciona una oportunidad y medir despues cuanto
+  // acerto cada nivel.
+  if (fila && antes?.nivel !== veredicto.nivel) {
+    await exec(
+      `INSERT INTO tg_candidatos_historial
+         (candidato_id, nivel, nivel_antes, score_tecnica, score_riesgo, fuentes_indep, precio_usd)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        fila.id, veredicto.nivel, antes?.nivel ?? null,
+        Math.round(veredicto.componentes.tecnica), Math.round(veredicto.componentes.riesgo),
+        r2.fuentesIndependientes, precio,
+      ],
+    );
+  }
 
   if (veredicto.nivel !== 'rojo') {
     log.debug({ token: t?.symbol, nivel: veredicto.nivel }, 'sin nivel suficiente para avisar');
@@ -342,7 +532,7 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
 
   const mensaje = construirAviso(
     { chain, address, symbol: t?.symbol ?? null, primeraMencion },
-    r1, r2, veredicto,
+    r1, r2, veredicto, social.resumenes,
   );
 
   const res = await notify(mensaje, {
@@ -372,9 +562,10 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
 const MAXIMO_POR_VUELTA = 300;
 
 /**
- * Repasa los tokens mencionados recientemente y evalua los que aun no
- * tienen veredicto. Se ejecuta periodicamente en vez de al momento,
- * porque hace falta que el Robot 1 haya terminado su analisis primero.
+ * Repasa los tokens mencionados recientemente y los que siguen en
+ * seguimiento, y los evalua. Se ejecuta periodicamente en vez de al
+ * momento, porque hace falta que el Robot 1 haya terminado su analisis
+ * primero.
  */
 export async function runRobot3(): Promise<number> {
   // OJO CON QUE FECHA SE FILTRA
@@ -390,15 +581,32 @@ export async function runRobot3(): Promise<number> {
   // decenas de golpe), cada vuelta cogia los mismos 40 y el resto no se
   // evaluaba nunca. Evaluar uno son unas pocas consultas: el tope queda
   // solo como freno de seguridad, y se empieza por lo mas reciente.
+  //
+  // Y TAMBIEN LOS QUE SIGUEN EN SEGUIMIENTO
+  // La especificacion pide decidir que oportunidades merecen atencion Y
+  // SEGUIMIENTO. Antes un veredicto se dejaba de revisar en cuanto pasaban
+  // 24 horas sin menciones nuevas, aunque el Robot 1 siguiera vigilando el
+  // token y sus datos cambiaran. Ahora, mientras el token este vigilado y
+  // el veredicto no sea un descarte, se sigue revisando.
   const pendientes = await query<{ chain: Chain; address: string }>(
-    `SELECT me.chain, me.address
-       FROM tg_mentions me
-       JOIN tokens t ON t.chain = me.chain AND t.address = me.address
-      WHERE me.creado_at > now() - interval '24 hours'
-        AND t.enriched_at IS NOT NULL
-      GROUP BY me.chain, me.address
-      ORDER BY MAX(me.creado_at) DESC
-      LIMIT $1`,
+    `SELECT chain, address FROM (
+       SELECT me.chain, me.address, MAX(me.creado_at) AS ultimo
+         FROM tg_mentions me
+         JOIN tokens t ON t.chain = me.chain AND t.address = me.address
+        WHERE me.creado_at > now() - interval '24 hours'
+          AND t.enriched_at IS NOT NULL
+        GROUP BY me.chain, me.address
+       UNION
+       SELECT c.chain, c.address, MAX(c.creado_at) AS ultimo
+         FROM tg_candidatos c
+         JOIN tokens t ON t.chain = c.chain AND t.address = c.address
+        WHERE c.enviado_at IS NULL AND c.nivel <> 'descartado'
+          AND t.tracked_until > now()
+        GROUP BY c.chain, c.address
+     ) x
+     GROUP BY chain, address
+     ORDER BY MAX(ultimo) DESC
+     LIMIT $1`,
     [MAXIMO_POR_VUELTA],
   );
   if (pendientes.length === MAXIMO_POR_VUELTA) {
