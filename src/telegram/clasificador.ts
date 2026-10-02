@@ -179,13 +179,24 @@ export async function runClasificador(): Promise<number> {
   if (cuotaAgotada()) return 0;
 
   const pendientes = await query<{ id: number; text: string; clasificacion_intentos: number }>(
-    `SELECT id, text, clasificacion_intentos FROM tg_messages
-      WHERE triage = 'candidato' AND clasificado_at IS NULL AND text IS NOT NULL
-        AND clasificacion_intentos < $2
+    `WITH p AS (
+       SELECT id, text, clasificacion_intentos, channel_id, posted_at,
+              EXISTS (SELECT 1 FROM tg_mentions me WHERE me.message_id = tg_messages.id) AS con_token
+         FROM tg_messages
+        WHERE triage = 'candidato' AND clasificado_at IS NULL AND text IS NOT NULL
+          AND clasificacion_intentos < $2
+     )
+     SELECT id, text, clasificacion_intentos FROM p
       -- Primero los que nombran un token ya identificado: son los que
       -- cuentan como fuentes para el Robot 3. La cuota del modelo es
       -- limitada y no debe irse en mensajes que no llevan a nada.
-      ORDER BY EXISTS (SELECT 1 FROM tg_mentions me WHERE me.message_id = tg_messages.id) DESC,
+      --
+      -- Y POR TURNOS ENTRE CANALES: el mas reciente de cada canal, luego el
+      -- segundo de cada uno, y asi. Antes iban solo por fecha, y un bot que
+      -- publica 2.000 mensajes al dia (KOLscope) se llevaba toda la cuota:
+      -- los mensajes de los demas canales no se resumian nunca.
+      ORDER BY con_token DESC,
+               ROW_NUMBER() OVER (PARTITION BY channel_id, con_token ORDER BY posted_at DESC),
                posted_at DESC
       LIMIT $1`,
     [POR_VUELTA, INTENTOS_MAXIMOS],

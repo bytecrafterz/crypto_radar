@@ -54,6 +54,25 @@ test('una caida antes del mensaje no es una subida ya hecha', () => {
   assert.equal(a.segundos, 20 * 60);
 });
 
+test('si la subida ya se ve en la primera medicion tras el mensaje, no es un adelanto', () => {
+  // El caso real: medicion 6 min antes, mensaje, y 0,1 s despues el precio
+  // ya multiplicado por 11. Se guardaba como "se adelanto 0 segundos".
+  const a = medirAnticipacion(serie([-6, 1], [0.1 / 60, 11], [1, 8], [5, 2]), MENCION);
+  assert.equal(a.veredicto, 'sin_datos');
+  assert.equal(a.segundos, null);
+});
+
+test('con el hueco a partes iguales alrededor del mensaje tampoco se sabe quien fue primero', () => {
+  const a = medirAnticipacion(serie([-10, 1], [-0.5, 1], [0.5, 1.4], [3, 1.5]), MENCION);
+  assert.equal(a.veredicto, 'sin_datos');
+});
+
+test('si casi todo el hueco cae despues del mensaje, cuenta como adelanto', () => {
+  const a = medirAnticipacion(serie([-10, 1], [-0.5, 1], [4, 1.4], [8, 1.5]), MENCION);
+  assert.equal(a.veredicto, 'se_adelanto');
+  assert.equal(a.segundos, 4 * 60);
+});
+
 test('sin subida no hay anticipacion que contar', () => {
   const a = medirAnticipacion(serie([-1, 1], [10, 1.1], [60, 0.9]), MENCION);
   assert.equal(a.veredicto, 'sin_movimiento');

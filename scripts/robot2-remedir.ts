@@ -11,6 +11,9 @@
  *     "se adelanto" y ganaba reputacion por llegar tarde.
  *   - "No se movio" y "sin datos" se guardaban como 0 segundos, que el
  *     Robot 3 leia como la anticipacion perfecta.
+ *   - Si el precio ya aparecia subido en la primera medicion despues del
+ *     mensaje, contaba como adelanto aunque lo mas probable fuera que
+ *     hubiera subido antes de publicarse.
  * Las menciones ya medidas conservan esos valores. Este script las mide
  * otra vez con el codigo corregido, sobre los mismos precios guardados.
  *

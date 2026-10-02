@@ -155,7 +155,8 @@ export function medirAnticipacion(filas: FilaPrecio[], mencion: Date): Anticipac
   // 2. ¿Subio despues? Primer punto POSTERIOR al mensaje que supera el
   // umbral respecto al precio que vio quien lo escribio.
   const umbral = base.precio * factor;
-  const disparo = puntos.find((p) => p.ts > tMencion && p.ts > base.ts && p.precio >= umbral);
+  const i = puntos.findIndex((p) => p.ts > tMencion && p.ts > base.ts && p.precio >= umbral);
+  const disparo = i === -1 ? undefined : puntos[i];
 
   if (!disparo) {
     return {
@@ -170,6 +171,29 @@ export function medirAnticipacion(filas: FilaPrecio[], mencion: Date): Anticipac
 
   const segundos = Math.round((disparo.ts - tMencion) / 1000);
   const subidaPct = ((disparo.precio - base.precio) / base.precio) * 100;
+
+  // ¿SUBIO DESPUES DEL MENSAJE O YA HABIA SUBIDO?
+  // La subida ocurrio en algun momento entre la medicion anterior y esta.
+  // Si ese hueco empieza antes del mensaje, puede que el precio subiera
+  // antes de publicarse. Solo cuenta como adelanto si es mas probable que
+  // subiera despues, es decir, si la mayor parte del hueco cae despues del
+  // mensaje. Caso real del 02/10: medicion a las 02:12, mensaje a las
+  // 02:18:17 y la siguiente medicion 0,1 s despues, con el precio ya
+  // multiplicado por 11. Se guardaba como "se adelanto 0 segundos" y daba
+  // reputacion a un canal que publico la subida cuando ya habia pasado.
+  const anterior = puntos[i - 1];
+  if (tMencion - anterior.ts >= disparo.ts - tMencion) {
+    return {
+      segundos: null,
+      precioMencion: base.precio,
+      precioMovimiento: disparo.precio,
+      subidaPct: Math.round(subidaPct * 10) / 10,
+      veredicto: 'sin_datos',
+      detalle:
+        'El precio ya habia subido en la primera medicion despues del mensaje: ' +
+        'no se sabe si subio antes o despues de publicarse.',
+    };
+  }
 
   return {
     segundos,
