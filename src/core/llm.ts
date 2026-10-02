@@ -24,7 +24,7 @@
  * su camino. El sistema entero funciona sin esta pieza: es una mejora, no
  * un requisito.
  */
-import { request } from './http.js';
+import { request, HttpError, QuotaExceededError } from './http.js';
 import { child } from './logger.js';
 
 const log = child('llm');
@@ -84,6 +84,25 @@ export function configLlm(): ConfigLlm | null {
  * no hace falta razonar. "/no_think" es la forma que tiene el propio
  * modelo de desactivarlo; a los demas modelos no se les anade nada.
  */
+/** Hasta cuando no merece la pena volver a preguntar al modelo. */
+let sinCuotaHasta = 0;
+
+/**
+ * ¿El proveedor acaba de decir que no queda cuota?
+ *
+ * La cuota gratuita de Groq para este modelo es de 200.000 tokens al dia, y
+ * se agota. Antes, cada mensaje que se intentaba clasificar con la cuota
+ * agotada gastaba uno de sus tres intentos, y a los tres quedaba como
+ * "indeterminado" para siempre, sin resumen. Quedarse sin cuota no dice
+ * nada del mensaje: ahora se espera y se sigue cuando la haya.
+ */
+export function cuotaAgotada(): boolean {
+  return Date.now() < sinCuotaHasta;
+}
+
+/** Tope de la respuesta cuando el modelo no razona: el JSON cabe de sobra. */
+const TOKENS_SIN_RAZONAR = 400;
+
 function sinRazonar(modelo: string): string {
   return /qwen3/i.test(modelo) ? '\n\n/no_think' : '';
 }
@@ -118,6 +137,9 @@ export async function preguntar(
           provider: 'llm',
           method: 'POST',
           timeoutMs: 30_000,
+          // Un 429 aqui es cuota agotada, no un fallo pasajero: reintentar
+          // solo deja la vuelta esperando minutos. Ver cuotaAgotada().
+          retries: 0,
           headers: {
             'x-api-key': c.clave,
             'anthropic-version': '2023-06-01',
@@ -150,6 +172,9 @@ export async function preguntar(
         provider: 'llm',
         method: 'POST',
         timeoutMs: 30_000,
+          // Un 429 aqui es cuota agotada, no un fallo pasajero: reintentar
+          // solo deja la vuelta esperando minutos. Ver cuotaAgotada().
+          retries: 0,
         headers: { 'content-type': 'application/json' },
         body: {
           systemInstruction: { parts: [{ text: instruccion }] },
@@ -165,19 +190,23 @@ export async function preguntar(
     }
 
     // Compatible con OpenAI: Groq, OpenRouter, Ollama, y un modelo local.
+    const tope = sinRazonar(c.modelo) ? Math.min(maxTokens, TOKENS_SIN_RAZONAR) : maxTokens;
     const r = await request<{ choices?: Array<{ message?: { content?: string } }> }>(
       `${c.base}/chat/completions`,
       {
         provider: 'llm',
         method: 'POST',
         timeoutMs: 30_000,
+          // Un 429 aqui es cuota agotada, no un fallo pasajero: reintentar
+          // solo deja la vuelta esperando minutos. Ver cuotaAgotada().
+          retries: 0,
         headers: {
           authorization: `Bearer ${c.clave}`,
           'content-type': 'application/json',
         },
         body: {
           model: c.modelo || 'llama-3.1-8b-instant',
-          max_tokens: maxTokens,
+          max_tokens: tope,
           temperature: 0,
           messages: [
             { role: 'system', content: instruccion + sinRazonar(c.modelo) },
@@ -188,6 +217,9 @@ export async function preguntar(
     );
     return r?.choices?.[0]?.message?.content ?? null;
   } catch (err) {
+    if ((err instanceof HttpError && err.status === 429) || err instanceof QuotaExceededError) {
+      sinCuotaHasta = Date.now() + 5 * 60_000;
+    }
     log.warn(
       { proveedor: c.proveedor, err: err instanceof Error ? err.message : String(err) },
       'el modelo no respondio',

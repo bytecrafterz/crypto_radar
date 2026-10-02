@@ -24,7 +24,7 @@
  */
 import { query, exec } from '../core/db.js';
 import { child } from '../core/logger.js';
-import { preguntar, hayModelo } from '../core/llm.js';
+import { preguntar, hayModelo, cuotaAgotada } from '../core/llm.js';
 
 const log = child('clasificador');
 
@@ -42,57 +42,26 @@ const INTENTOS_MAXIMOS = 3;
 
 export type Clase = 'informacion' | 'promocion' | 'hype' | 'indeterminado';
 
-const INSTRUCCION = `Eres un filtro de mensajes de canales de criptomonedas.
-Los mensajes pueden venir en espanol, portugues o ingles.
+// CORTA A PROPOSITO
+// La cuota gratuita del modelo se cuenta en tokens, y estas instrucciones
+// se mandan con cada mensaje. Cada palabra de mas aqui son cientos de
+// mensajes menos clasificados al dia.
+const INSTRUCCION = `Filtras mensajes de canales de cripto, escritos en espanol, portugues o ingles.
+Responde SOLO este JSON, sin nada alrededor:
+{"clase":"informacion|promocion|hype","confianza":85,"motivo":"","idioma":"es|pt|en|otro","tipo":"general","resumen":"","afirmaciones":[]}
 
-Tu trabajo es decidir si un mensaje aporta INFORMACION comprobable sobre
-un token o si es PUBLICIDAD disfrazada de informacion, y resumir en
-espanol lo que afirma.
-
-Responde SOLO con un JSON, sin nada mas alrededor:
-{"clase":"informacion|promocion|hype","confianza":85,"motivo":"breve",
- "idioma":"es|pt|en|otro","tipo":"listing|lanzamiento|partnership|whale|negativo|llamada|general",
- "resumen":"una frase en espanol","afirmaciones":["liquidez_bloqueada"]}
-
-La confianza es un numero ENTERO entre 0 y 100. No uses decimales.
-
-clase:
-informacion: dice algo concreto y comprobable. Un listado, una auditoria,
-  liquidez bloqueada con plazo, un movimiento de una cartera grande, un
-  desbloqueo, un contrato con datos verificables, una advertencia de
-  estafa. Que este bien o mal escrito da igual.
-promocion: promociona un token en concreto usando lenguaje de venta.
-  Urgencia, promesas de multiplicar, "entra ya", "no te lo pierdas",
-  "compre agora", "nao perca", enlaces de referido. Puede incluir datos
-  reales, pero el proposito es que compres, no que sepas.
-hype: entusiasmo sin nada concreto. Emojis, "to the moon", "gema", sin
-  ningun dato que se pueda comprobar.
-Ante la duda entre informacion y promocion, elige promocion: es peor
-tratar publicidad como informacion que al reves.
-
-idioma: el idioma del mensaje.
-
-tipo: listing (lo listan en un exchange), lanzamiento (token nuevo o
-  preventa), partnership (alianza o acuerdo), whale (compra o venta de
-  una cartera grande), negativo (aviso de estafa, rug, honeypot, el
-  equipo vendio, liquidez retirada), llamada (recomendacion de compra
-  sin mas), general (nada de lo anterior).
-
-resumen: UNA frase en espanol, de menos de 25 palabras, con lo que el
-  mensaje afirma del token. Sin opinar ni repetir el lenguaje de venta.
-  Ejemplo: "Afirma que la liquidez esta bloqueada 6 meses y que el
-  contrato esta renunciado."
-
-afirmaciones: solo las que el mensaje dice EXPRESAMENTE, de esta lista:
-  liquidez_bloqueada (LP bloqueada o quemada),
-  sin_permisos (mint o freeze revocados, contrato renunciado, sin owner),
-  sin_impuestos (0% de impuesto o "no tax"),
-  no_honeypot (dice que se puede vender, "not a honeypot"),
-  advertencia (avisa de estafa, rug, honeypot, que el equipo vendio o que
-  retiraron la liquidez).
-  Lista vacia si no dice ninguna.
-
-El motivo, en espanol y en menos de quince palabras.`;
+clase: informacion = dato concreto y comprobable (listado, auditoria, liquidez bloqueada con plazo,
+compra de una cartera grande, desbloqueo, aviso de estafa). promocion = vende un token con urgencia o
+promesas ("entra ya", "100x", "nao perca", referidos), aunque traiga datos. hype = entusiasmo sin datos.
+En la duda entre informacion y promocion, promocion.
+confianza: entero de 0 a 100.
+motivo: en espanol, menos de 15 palabras.
+tipo: listing (exchange), lanzamiento (token nuevo o preventa), partnership, whale (cartera grande),
+negativo (estafa, rug, honeypot, equipo vendio, liquidez retirada), llamada (solo recomienda comprar), general.
+resumen: una frase en espanol de menos de 25 palabras con lo que afirma del token, sin lenguaje de venta.
+afirmaciones: solo las que dice expresamente: liquidez_bloqueada, sin_permisos (mint o freeze revocados,
+contrato renunciado), sin_impuestos (0% de impuesto), no_honeypot (se puede vender), advertencia
+(estafa, rug, honeypot, equipo vendio, liquidez retirada).`;
 
 export type Afirmacion =
   | 'liquidez_bloqueada' | 'sin_permisos' | 'sin_impuestos' | 'no_honeypot' | 'advertencia';
@@ -177,7 +146,7 @@ export async function clasificar(texto: string): Promise<Veredicto | null> {
   if (!hayModelo()) return null;
   // Mensajes larguisimos se recortan: el principio ya dice de que va, y
   // pagar por leer mil lineas de firma no aporta nada.
-  const respuesta = await preguntar(INSTRUCCION, texto.slice(0, 1500), 1000);
+  const respuesta = await preguntar(INSTRUCCION, texto.slice(0, 1200), 1000);
   return leerRespuesta(respuesta);
 }
 
@@ -206,6 +175,8 @@ async function guardar(id: number, v: Veredicto): Promise<void> {
  */
 export async function runClasificador(): Promise<number> {
   if (!hayModelo()) return 0;
+  // Sin cuota no se intenta nada: se sigue en cuanto vuelva a haberla.
+  if (cuotaAgotada()) return 0;
 
   const pendientes = await query<{ id: number; text: string; clasificacion_intentos: number }>(
     `SELECT id, text, clasificacion_intentos FROM tg_messages
@@ -228,6 +199,13 @@ export async function runClasificador(): Promise<number> {
       await guardar(m.id, v);
       hechos++;
       continue;
+    }
+
+    // Sin cuota del modelo: el mensaje no tiene la culpa. No se le cuenta
+    // el intento y se para la vuelta hasta que vuelva a haber cuota.
+    if (cuotaAgotada()) {
+      log.info({ clasificados: hechos }, 'cuota del modelo agotada; se sigue cuando vuelva a haberla');
+      return hechos;
     }
 
     // No hubo respuesta. Puede ser un limite por minuto o una caida
@@ -267,6 +245,7 @@ export async function runClasificador(): Promise<number> {
       [hueco],
     );
     for (const m of atrasados) {
+      if (cuotaAgotada()) break;
       const v = await clasificar(m.text);
       if (!v) break;
       await guardar(m.id, v);
