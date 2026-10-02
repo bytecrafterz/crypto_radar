@@ -18,6 +18,7 @@
  */
 import { query, queryOne, exec } from '../core/db.js';
 import { child } from '../core/logger.js';
+import { sePidioParar } from '../core/parada.js';
 import { leerCanal, misCanales, pausa, estaConfigurado } from './mtproto.js';
 import { triar, hashTexto, extraerCandidatos } from './triaje.js';
 import { porDireccion, porTicker } from './resolver.js';
@@ -69,11 +70,21 @@ export async function sincronizarCanales(): Promise<number> {
   return nuevos;
 }
 
+let avisadoSinSecreto = false;
+
 /** Pide veredicto al Robot 1. */
 async function pedirVeredicto(chain: Chain, address: string): Promise<boolean> {
   const secreto = process.env.API_SHARED_SECRET ?? '';
   const puerto = process.env.PORT ?? '3000';
-  if (!secreto) return false;
+  if (!secreto) {
+    // Antes fallaba en silencio: el Robot 2 encontraba tokens que el
+    // Robot 1 nunca analizaba, y el Robot 3 no tenia nada que cruzar.
+    if (!avisadoSinSecreto) {
+      log.error('sin API_SHARED_SECRET en .env: el Robot 1 no puede analizar lo que encuentra Telegram');
+      avisadoSinSecreto = true;
+    }
+    return false;
+  }
   try {
     await fetch(`http://127.0.0.1:${puerto}/api/candidato`, {
       method: 'POST',
@@ -108,20 +119,28 @@ export async function runColectorMt(): Promise<ResumenMt> {
   );
 
   for (const canal of canales) {
+    // Si el servicio se esta parando, se termina el canal en curso (con su
+    // marcador al dia) y no se empieza otro.
+    if (sePidioParar()) break;
     r.canales++;
     const desde = Number(canal.ultimo_msg_id) || 0;
 
     // La primera vez se cogen pocos: no interesa arrastrar meses de
     // historico, solo empezar a mirar desde ahora.
-    const mensajes = await leerCanal(canal.username, desde, desde === 0 ? 10 : 30);
+    const { mensajes, ultimoId } = await leerCanal(canal.username, desde, desde === 0 ? 10 : 100);
     await exec('UPDATE tg_channels SET leido_at = now() WHERE id = $1', [canal.id]);
 
     if (mensajes.length === 0) {
+      // Solo mensajes sin texto (fotos, videos): no hay nada que procesar,
+      // pero hay que avanzar el marcador o se volverian a pedir siempre.
+      if (ultimoId > desde) {
+        await exec('UPDATE tg_channels SET ultimo_msg_id = $2 WHERE id = $1', [canal.id, ultimoId]);
+      }
       await pausa(PAUSA_MS);
       continue;
     }
 
-    let maxId = desde;
+    let maxId = Math.max(desde, ultimoId);
 
     for (const m of mensajes) {
       try {

@@ -38,14 +38,28 @@ const PALABRAS_INFORMATIVAS = [
   'contract', 'liquidity', 'locked', 'burn', 'airdrop', 'snapshot',
   'migration', 'unlock', 'vesting', 'treasury', 'buyback', 'whale',
   'rug', 'honeypot', 'scam', 'exploit', 'hack', 'dev sold', 'team sold',
-  // Espanol
-  'listado', 'lanzamiento', 'preventa', 'asociacion', 'auditoria',
+  // Espanol (sin tildes: el texto se compara ya sin ellas, ver sinTildes)
+  'listado', 'lanzamiento', 'preventa', 'asociacion', 'alianza', 'auditoria',
   'contrato', 'liquidez', 'bloqueada', 'quemado', 'quema', 'desbloqueo',
-  'estafa', 'robo', 'equipo vendio',
+  'ballena', 'estafa', 'robo', 'equipo vendio', 'dev vendio', 'nuevo token',
   // Portugues
-  'listagem', 'lancamento', 'parceria', 'auditoria', 'contrato',
-  'liquidez', 'bloqueada', 'queima', 'golpe', 'equipe vendeu',
+  'listagem', 'lancamento', 'pre-venda', 'prevenda', 'parceria', 'auditoria',
+  'contrato', 'liquidez', 'bloqueada', 'queima', 'desbloqueio', 'baleia',
+  'golpe', 'equipe vendeu', 'dev vendeu', 'novo token',
 ];
+
+/**
+ * Minusculas y sin tildes ni enies.
+ *
+ * Las listas de palabras estan escritas sin tildes, y antes se comparaban
+ * con el texto tal cual: "lancamento" no casaba con "lançamento",
+ * "asociacion" con "asociación", ni "equipo vendio" con "equipo vendió".
+ * Justo las palabras en espanol y portugues, que son dos de los tres
+ * idiomas que pide la especificacion, se perdian.
+ */
+export function sinTildes(texto: string): string {
+  return texto.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+}
 
 /**
  * Ruido puro. Un mensaje que SOLO tiene esto y ninguna direccion se
@@ -109,7 +123,7 @@ export function extraerCandidatos(texto: string): Candidato[] {
 
   // Los tickers solo si el mensaje ademas dice algo informativo: un
   // ticker suelto entre hype no es una mencion util.
-  const bajo = texto.toLowerCase();
+  const bajo = sinTildes(texto);
   const informativa = PALABRAS_INFORMATIVAS.some((p) => bajo.includes(p));
   if (informativa) {
     for (const m of texto.matchAll(new RegExp(RE_TICKER.source, 'g'))) {
@@ -165,7 +179,7 @@ export function triar(texto: string | null | undefined): ResultadoTriaje {
     return { pasa: false, motivo: 'mensaje vacio o demasiado corto' };
   }
 
-  const bajo = texto.toLowerCase();
+  const bajo = sinTildes(texto);
 
   // 1. Una direccion de contrato es la senal mas fuerte que puede haber:
   //    identifica el token sin ambiguedad. Pasa siempre.

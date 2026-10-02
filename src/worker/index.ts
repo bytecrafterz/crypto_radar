@@ -4,6 +4,7 @@
  * Cada tarea corre en su propio bucle y nunca se solapa consigo misma.
  * Si una vuelta falla, se registra y se sigue: el sistema no se para.
  */
+import { pedirParada } from '../core/parada.js';
 import { child } from '../core/logger.js';
 import { getFilters, validateConfig } from '../core/config.js';
 import { logActivity, recordUsage } from '../core/db.js';
@@ -18,7 +19,7 @@ import { comprobar as comprobarBot } from '../telegram/bot.js';
 import { actualizarPendientes, recalcularReputacion } from '../telegram/anticipacion.js';
 import { runDescubrimiento } from '../telegram/descubrimiento.js';
 import { runColectorMt, sincronizarCanales } from '../telegram/colector-mt.js';
-import { runRobot3 } from '../robot3/evaluador.js';
+import { runRobot3, evaluar } from '../robot3/evaluador.js';
 import { vigilar, latir, runVigilante } from './vigilante.js';
 import { runClasificador } from '../telegram/clasificador.js';
 import { hayModelo } from '../core/llm.js';
@@ -66,6 +67,12 @@ function conTope<T>(promesa: Promise<T>, ms: number, nombre: string): Promise<T>
   });
 }
 
+/** Vueltas en marcha ahora mismo, para poder esperarlas al parar. */
+const enCurso = new Set<Promise<unknown>>();
+
+/** Lo maximo que se espera a que terminen al parar. systemd da 90 s. */
+const ESPERA_PARADA_MS = 60_000;
+
 function loop(name: string, intervalMs: () => number, task: () => Promise<unknown>): void {
   let busy = false;
 
@@ -79,12 +86,15 @@ function loop(name: string, intervalMs: () => number, task: () => Promise<unknow
     } else {
       busy = true;
       const started = Date.now();
+      const vuelta = conTope(Promise.resolve(task()), TOPE_VUELTA_MS, name);
+      enCurso.add(vuelta);
       try {
-        await conTope(Promise.resolve(task()), TOPE_VUELTA_MS, name);
+        await vuelta;
       } catch (err) {
         log.error({ tarea: name, err: String(err) }, 'error en la tarea');
         await logActivity('error', name, `Error en la tarea: ${String(err)}`).catch(() => {});
       } finally {
+        enCurso.delete(vuelta);
         busy = false;
         // La vuelta ha terminado, con exito o con error. Lo que importa
         // para el vigilante es que el bucle sigue vivo: un error que se
@@ -185,9 +195,22 @@ export async function startWorker(): Promise<void> {
   // datos, asi que corren siempre.
   //
   // La anticipacion no puede calcularse al recibir el mensaje: en ese
-  // momento todavia no ha pasado nada que medir.
-  loop('robot2-anticipacion', () => 30 * 60_000, () => actualizarPendientes());
-  loop('robot2-reputacion', () => 6 * 60 * 60_000, recalcularReputacion);
+  // momento todavia no ha pasado nada que medir. Se mira a menudo porque
+  // en cuanto el precio se mueve ya se sabe, y el Robot 3 la necesita
+  // mientras la mencion es reciente. La reputacion sale de ella, asi que
+  // va al mismo paso; las dos son consultas pequenas.
+  loop('robot2-anticipacion', () => 5 * 60_000, async () => {
+    const r = await actualizarPendientes();
+    // En cuanto se sabe que un token se movio tras una mencion, el Robot 3
+    // lo mira ya, sin esperar a su propia vuelta: es justo el momento en
+    // que puede llegar al nivel maximo, y cinco minutos aqui son precio.
+    for (const t of r.conMovimiento) {
+      await evaluar(t.chain, t.address).catch((err) =>
+        log.warn({ err: String(err), token: t.address }, 'fallo evaluando tras medir la anticipacion'),
+      );
+    }
+  });
+  loop('robot2-reputacion', () => 30 * 60_000, recalcularReputacion);
 
   // --- Segunda etapa del triaje ------------------------------------------
   if (hayModelo()) {
@@ -241,8 +264,18 @@ export async function startWorker(): Promise<void> {
 
 export async function stopWorker(): Promise<void> {
   running = false;
+  pedirParada();
   for (const t of timers) clearTimeout(t);
   timers.length = 0;
+  // Se deja terminar lo que esta en marcha antes de que se cierre la base
+  // de datos, con un tope para no colgar el reinicio.
+  if (enCurso.size > 0) {
+    log.info({ tareas: enCurso.size }, 'esperando a que terminen las vueltas en marcha');
+    await Promise.race([
+      Promise.allSettled([...enCurso]),
+      new Promise((r) => setTimeout(r, ESPERA_PARADA_MS)),
+    ]);
+  }
   await persistUsage().catch(() => {});
   await stopTelegram();
   log.info('motor detenido');

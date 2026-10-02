@@ -43,9 +43,18 @@ test('ANTE LA DUDA, PASAR: un ticker con palabra informativa no se tira', () => 
 });
 
 test('los tres idiomas de la especificacion valen igual', () => {
-  assert.equal(triar('$BONK listing confirmado en Binance').pasa, true, 'espanol');
+  // Cada frase solo con palabras de su idioma. La version anterior de esta
+  // prueba pasaba en "espanol" gracias a la palabra inglesa "listing".
+  assert.equal(triar('$BONK lanzamiento confirmado en Binance').pasa, true, 'espanol');
   assert.equal(triar('$BONK listagem confirmada na Binance').pasa, true, 'portugues');
   assert.equal(triar('$BONK listing confirmed on Binance').pasa, true, 'ingles');
+});
+
+test('las tildes no esconden las palabras en espanol y portugues', () => {
+  assert.equal(triar('$BONK lançamento hoje, não perca').pasa, true, 'portugues con cedilla');
+  assert.equal(triar('$BONK nueva asociación anunciada').pasa, true, 'espanol con tilde');
+  assert.equal(triar('$BONK el equipo vendió todo').pasa, true, 'espanol con tilde final');
+  assert.equal(triar('$BONK baleia comprou 2% do supply').pasa, true, 'portugues, ballenas');
 });
 
 test('un mensaje vacio o nulo no revienta nada', () => {

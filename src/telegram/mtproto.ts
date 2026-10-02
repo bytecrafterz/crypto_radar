@@ -271,29 +271,56 @@ export interface MensajeMt {
   reenviadoDeTitulo: string | null;
 }
 
+export interface LecturaCanal {
+  /** Los mensajes con texto, en orden. */
+  mensajes: MensajeMt[];
+  /**
+   * El id mas alto que devolvio Telegram, tenga texto o no. Es hasta donde
+   * se ha leido: si se avanzara solo hasta el ultimo con texto, una tanda
+   * entera de fotos sin pie dejaria el marcador clavado para siempre.
+   */
+  ultimoId: number;
+}
+
 /**
- * Lee los mensajes recientes de los canales en los que ya estamos.
+ * Lee los mensajes de un canal en el que ya estamos.
  */
 export async function leerCanal(
   username: string,
   desdeId = 0,
   limite = 30,
-): Promise<MensajeMt[]> {
+): Promise<LecturaCanal> {
+  const nada: LecturaCanal = { mensajes: [], ultimoId: desdeId };
   const cli = await conectar();
-  if (!cli) return [];
+  if (!cli) return nada;
 
   try {
     const ent = await conTope(() => cli.getEntity(username), 'abrir @' + username, null);
-    if (!ent) return [];
+    if (!ent) return nada;
     const c = ent as Api.Channel;
+    // HACIA DELANTE DESDE EL ULTIMO LEIDO
+    // Antes se pedian los `limite` mas recientes por encima de desdeId. Si
+    // entre dos visitas el canal publicaba mas que eso, los del medio no se
+    // leian nunca: el marcador saltaba al mas nuevo y el hueco quedaba
+    // atras. Ahora se leen en orden desde el ultimo visto; si hay mas de
+    // `limite`, el resto se lee en la visita siguiente.
+    //
+    // La primera vez (desdeId = 0) se cogen los mas recientes: leer hacia
+    // delante desde 0 seria empezar por el primer mensaje de la historia
+    // del canal.
+    const opciones = desdeId > 0
+      ? { limit: limite, minId: desdeId, reverse: true }
+      : { limit: limite };
     const mensajes = await conTope(
-      () => cli.getMessages(ent, { limit: limite, minId: desdeId }),
+      () => cli.getMessages(ent, opciones),
       'leer @' + username,
       [] as unknown as Awaited<ReturnType<typeof cli.getMessages>>,
     );
 
-    return mensajes
-      .filter((m) => m.message)
+    const ultimoId = mensajes.reduce((max, m) => Math.max(max, m.id), desdeId);
+    const conTexto = mensajes
+      .filter((m) => m.message && m.id > desdeId)
+      .sort((x, y) => x.id - y.id)
       .map((m) => {
         // El reenvio dice de donde salio originalmente el contenido: es
         // como se descubren canales que nadie ha buscado nunca.
@@ -331,12 +358,13 @@ export async function leerCanal(
           reenviadoDeTitulo,
         };
       });
+    return { mensajes: conTexto, ultimoId };
   } catch (err) {
     log.warn(
       { canal: username, err: err instanceof Error ? err.message : String(err) },
       'no se pudo leer el canal',
     );
-    return [];
+    return nada;
   }
 }
 

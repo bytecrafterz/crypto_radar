@@ -55,11 +55,15 @@ interface FilaMensaje {
 }
 
 function minutos(seg: number | null, veredicto?: string | null): string {
-  if (seg === null) return '<span class="dim">pendiente</span>';
+  // El veredicto va primero: "sin movimiento" y "sin datos" se guardan sin
+  // segundos, y mirando solo el numero salian como "pendiente".
+  //
   // "No se pudo medir" no es lo mismo que "no se movio". Pasa con las
   // menciones del historico: son de antes de que vigilaramos el token,
   // asi que no habia con que compararlas.
   if (veredicto === 'sin_datos') return '<span class="dim">no se pudo medir</span>';
+  if (veredicto === 'sin_movimiento') return '<span class="dim">sin movimiento</span>';
+  if (seg === null) return '<span class="dim">pendiente</span>';
   if (seg === 0) return '<span class="dim">sin movimiento</span>';
   const m = Math.round(seg / 60);
   return m > 0

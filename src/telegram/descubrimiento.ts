@@ -16,9 +16,10 @@
  * la forma mas rapida de que Telegram bloquee la cuenta, y ademas hay un
  * tope de unos 500 canales, asi que el sitio es limitado.
  */
-import { query, queryOne, exec } from '../core/db.js';
+import { query, queryOne, exec, getState, setState } from '../core/db.js';
 import { child } from '../core/logger.js';
 import { buscarCanales, mirarCanal, unirse, salir, pausa } from './mtproto.js';
+import { sinTildes } from './triaje.js';
 
 const log = child('descubrimiento');
 
@@ -34,6 +35,9 @@ const UNIONES_POR_DIA = 3;
 
 /** Pausa entre operaciones que tocan la red de Telegram. */
 const PAUSA_MS = 4000;
+
+/** Por que consulta de la lista va la rotacion. */
+const CLAVE_ROTACION = 'descubrimiento_rotacion';
 
 /**
  * Consultas de busqueda, en los tres idiomas que pide la especificacion.
@@ -56,17 +60,35 @@ const CONSULTAS = [
   //
   // Se dejan tambien consultas de "calls" porque, con todo lo promocional
   // que son, hoy son los unicos que producen menciones.
-  'whale alerts', 'token unlocks', 'rug pull alerts', 'token audit',
-  'onchain analysis', 'new token listings', 'solana new tokens',
-  'liquidity locked', 'contract renounced', 'scam token alerts',
-  // Espanol
-  'alertas ballenas', 'estafas cripto', 'nuevos tokens solana',
-  'tokens nuevos cripto',
-  // Portugues
-  'alertas baleias', 'golpes cripto', 'novos tokens cripto',
-  // Canales de llamadas: venden, pero son los que citan tokens.
-  'solana calls', 'early calls', 'memecoin calls',
+  //
+  // LOS TRES IDIOMAS POR IGUAL
+  // La especificacion pide buscar en espanol, portugues e ingles. La lista
+  // tenia trece consultas en ingles, cuatro en espanol y tres en
+  // portugues. Ahora son ocho de cada, intercaladas para que cada vuelta
+  // toque idiomas distintos.
+  ...intercalar(
+    [
+      'whale alerts', 'new token listings', 'solana new tokens', 'rug pull alerts',
+      'token unlocks', 'onchain analysis', 'liquidity locked', 'solana calls',
+    ],
+    [
+      'alertas ballenas', 'nuevos tokens solana', 'tokens nuevos cripto', 'estafas cripto',
+      'alertas rug pull', 'analisis onchain', 'cripto alertas', 'memecoins español',
+    ],
+    [
+      'alertas baleias', 'novos tokens solana', 'novos tokens cripto', 'golpes cripto',
+      'alertas rug pull brasil', 'analise onchain', 'cripto alertas brasil', 'memecoins brasil',
+    ],
+  ),
 ];
+
+/** [a1, b1, c1, a2, b2, c2, ...] */
+function intercalar(...listas: string[][]): string[] {
+  const largo = Math.max(...listas.map((l) => l.length));
+  const r: string[] = [];
+  for (let i = 0; i < largo; i++) for (const l of listas) if (l[i]) r.push(l[i]);
+  return r;
+}
 
 /**
  * Enlaces a otros canales dentro de un texto.
@@ -93,6 +115,17 @@ const TRAMOS_NO_USUARIO = new Set([
   'joinchat', 'addlist', 'proxy', 'socks', 'share', 'iv', 'setlanguage', 'addstickers',
 ]);
 
+/** Alfabetos que no son de ninguno de los tres idiomas pedidos. */
+const OTRO_ALFABETO =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Cyrillic}\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Thai}\p{Script=Devanagari}\p{Script=Bengali}]/u;
+
+/** Temas que no tienen nada que ver con tokens. Sin tildes. */
+const FUERA_DE_TEMA = [
+  'futbol', 'football', 'soccer', 'champions', 'liga de', 'deporte', 'esporte', 'sports',
+  'casino', 'apuestas', 'apostas', 'betting', 'opciones binarias', 'opcoes binarias',
+  'binary options',
+];
+
 /**
  * Puntua un canal SIN entrar en el, solo con lo que se ve de fuera.
  *
@@ -108,7 +141,26 @@ export function puntuar(
 ): { score: number; motivo: string } {
   let score = 50;
   const motivos: string[] = [];
-  const t = titulo.toLowerCase();
+  // NFKC primero: hay titulos escritos con letras "decorativas" de
+  // Unicode (𝔏𝔦𝔤𝔞, 𝐀𝐋𝐏𝐇𝐀) que sin normalizar no casan con nada.
+  const t = sinTildes(titulo.normalize('NFKC'));
+
+  // IDIOMA
+  // La especificacion pide fuentes en espanol, portugues e ingles. Por
+  // reenvio entraban canales en chino: con el +25 del reenvio superaban el
+  // corte aunque nadie en el equipo pudiera leerlos.
+  if (OTRO_ALFABETO.test(titulo)) {
+    score -= 45;
+    motivos.push('titulo en un alfabeto fuera de espanol, portugues e ingles');
+  }
+
+  // TEMA
+  // Tambien por reenvio entro un canal de futbol. No habla de tokens.
+  const fuera = FUERA_DE_TEMA.find((p) => t.includes(p));
+  if (fuera) {
+    score -= 45;
+    motivos.push(`fuera de tema ("${fuera}")`);
+  }
 
   // Tamano. Ni muy pequeno ni gigante: los canales enormes suelen ser
   // publicidad pagada, y los diminutos no tienen actividad.
@@ -225,9 +277,14 @@ async function apuntar(
  * las mismas ni disparar limites.
  */
 export async function buscarNuevos(cuantas = 3): Promise<number> {
-  // Rotacion basada en la hora, para recorrer toda la lista a lo largo
-  // del dia sin guardar estado.
-  const inicio = (new Date().getHours() * cuantas) % CONSULTAS.length;
+  // ROTACION CON MEMORIA
+  // Antes el punto de partida salia de la hora del dia. Con una vuelta
+  // cada dos horas, las horas pares tocaban siempre las mismas consultas
+  // y las impares las otras: la mitad de la lista no se usaba nunca, y
+  // con ella casi todas las de portugues. Ahora se guarda por donde se
+  // iba y se sigue desde ahi.
+  const inicio = (await getState<number>(CLAVE_ROTACION, 0)) % CONSULTAS.length;
+  await setState(CLAVE_ROTACION, (inicio + cuantas) % CONSULTAS.length);
   let apuntados = 0;
 
   for (let i = 0; i < cuantas; i++) {
@@ -430,6 +487,7 @@ export async function abandonarInutiles(): Promise<number> {
           WHERE id = $1`,
         [m.id],
       );
+      await dejarDeLeer(m.username);
       await exec(
         `INSERT INTO tg_uniones (canal_id, username, accion, resultado, detalle)
          VALUES ($1, $2, 'salida', 'ok', 'sin aportar nada en una semana')`,
@@ -495,6 +553,7 @@ export async function abandonarSoloPublicidad(): Promise<number> {
           WHERE id = $1`,
         [m.id],
       );
+      await dejarDeLeer(m.username);
       await exec(
         `INSERT INTO tg_uniones (canal_id, username, accion, resultado, detalle)
          VALUES ($1, $2, 'salida', 'ok', $3)`,
@@ -506,6 +565,88 @@ export async function abandonarSoloPublicidad(): Promise<number> {
   }
 
   if (fuera > 0) log.info({ fuera }, 'canales abandonados por publicar solo publicidad');
+  return fuera;
+}
+
+/**
+ * Deja de leer un canal del que se ha salido.
+ *
+ * Salir solo se apuntaba en la lista de descubiertos: el lector seguia
+ * leyendo el canal (los publicos se pueden leer sin estar dentro) y sus
+ * menciones seguian contando como fuentes para el Robot 3. El panel decia
+ * "15 abandonados" mientras los 58 se seguian leyendo.
+ */
+async function dejarDeLeer(username: string): Promise<void> {
+  await exec('UPDATE tg_channels SET active = false WHERE lower(username) = lower($1)', [username]);
+}
+
+/**
+ * Pone al dia los canales abandonados antes de que existiera dejarDeLeer.
+ * No hace nada si ya estan bien, asi que puede correr en cada vuelta.
+ */
+async function desactivarAbandonados(): Promise<number> {
+  return exec(
+    `UPDATE tg_channels c SET active = false
+       FROM tg_canales_descubiertos d
+      WHERE lower(d.username) = lower(c.username)
+        AND d.estado = 'abandonado' AND c.active`,
+  );
+}
+
+/** Menciones medidas que hacen falta para juzgar si un canal llega tarde. */
+const MEDIDAS_PARA_JUZGAR = 6;
+
+/**
+ * Abandona canales que llegan siempre tarde.
+ *
+ * Los otros dos criterios no lo cubrian: un canal que cita tokens a
+ * diario, siempre cuando ya han subido, aporta menciones y no es solo
+ * publicidad, asi que se quedaba para siempre. Para el Robot 3 vale cero
+ * (su reputacion es 0) y ocupa una plaza que podria tener otro.
+ *
+ * Solo canales que encontro el propio sistema: los que el cliente puso a
+ * mano no se tocan. Y solo con muestra suficiente: seis menciones con el
+ * precio medido y ni una sola antes del movimiento.
+ */
+export async function abandonarTardios(): Promise<number> {
+  const malos = await query<{ id: number; username: string; medidas: number }>(
+    `SELECT d.id, d.username, COUNT(*)::int AS medidas
+       FROM tg_canales_descubiertos d
+       JOIN tg_channels c  ON lower(c.username) = lower(d.username)
+       JOIN tg_mentions me ON me.channel_id = c.id
+      WHERE d.estado = 'unido'
+        AND d.unido_at < now() - interval '7 days'
+        AND me.anticipacion_veredicto IN ('se_adelanto', 'reacciono', 'sin_movimiento')
+      GROUP BY d.id, d.username
+     HAVING COUNT(*) >= $1
+        AND COUNT(*) FILTER (WHERE me.anticipacion_veredicto = 'se_adelanto') = 0
+      LIMIT 2`,
+    [MEDIDAS_PARA_JUZGAR],
+  );
+
+  let fuera = 0;
+  for (const m of malos) {
+    if (await salir(m.username)) {
+      await exec(
+        `UPDATE tg_canales_descubiertos
+            SET estado = 'abandonado',
+                motivo_estado = 'siempre llega despues del movimiento',
+                revisado_at = now()
+          WHERE id = $1`,
+        [m.id],
+      );
+      await dejarDeLeer(m.username);
+      await exec(
+        `INSERT INTO tg_uniones (canal_id, username, accion, resultado, detalle)
+         VALUES ($1, $2, 'salida', 'ok', $3)`,
+        [m.id, m.username, `${m.medidas} menciones medidas y ninguna antes del movimiento`],
+      );
+      fuera++;
+    }
+    await pausa(PAUSA_MS);
+  }
+
+  if (fuera > 0) log.info({ fuera }, 'canales abandonados por llegar siempre tarde');
   return fuera;
 }
 
@@ -521,8 +662,11 @@ export async function runDescubrimiento(): Promise<{
   const unidos = await unirseALosMejores();
   const abandonados = await abandonarInutiles();
   const publicitarios = await abandonarSoloPublicidad();
+  const tardios = await abandonarTardios();
+  const desactivados = await desactivarAbandonados();
+  if (desactivados > 0) log.info({ desactivados }, 'canales abandonados que se seguian leyendo, ya no');
 
-  const r = { buscados, enlaces, unidos, abandonados: abandonados + publicitarios };
+  const r = { buscados, enlaces, unidos, abandonados: abandonados + publicitarios + tardios };
   if (buscados + enlaces + unidos + abandonados > 0) {
     log.info(r, 'vuelta de descubrimiento');
   }

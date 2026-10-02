@@ -17,6 +17,8 @@
 import { query, queryOne, exec } from '../core/db.js';
 import { child } from '../core/logger.js';
 import { notify } from '../worker/notify.js';
+import { isPaused } from '../worker/telegram.js';
+import { saveAlert } from '../core/repo.js';
 import { decidir, describirAnticipacion, type EntradaRobot1, type EntradaRobot2 } from './convergencia.js';
 import { contarFuentes, type MencionFuente } from './fuentes.js';
 import { umbralesActuales, avisosPorDia } from './umbrales.js';
@@ -76,12 +78,25 @@ async function reunirSenalSocial(chain: string, address: string): Promise<Entrad
     tipo: string | null;
   }>(
     `SELECT COUNT(*) FILTER (WHERE m.clasificacion = 'informacion')::int AS con_informacion,
-            AVG(me.anticipacion_seg)::int                             AS anticipacion,
-            AVG(COALESCE(s.tasa_utiles, 0))::int                      AS reputacion,
+            -- Solo las menciones tras las que hubo movimiento. "No se
+            -- movio" y "sin datos" se guardaban como 0 segundos, y ese 0
+            -- puntuaba como la anticipacion perfecta.
+            AVG(me.anticipacion_seg) FILTER (
+              WHERE me.anticipacion_veredicto IN ('se_adelanto', 'reacciono'))::int AS anticipacion,
+            -- Media por CANAL y solo de los que tienen historial medido.
+            -- Antes era por mencion y con los no medidos a 0: un canal que
+            -- repetia el token diez veces pesaba diez veces mas, y uno
+            -- recien llegado hundia la media de los que si acertaban. Si
+            -- ninguno tiene historial, la reputacion es 0: sin pruebas no
+            -- se confia.
+            (SELECT AVG(s.tasa_utiles)::int
+               FROM tg_source_stats s
+              WHERE s.tasa_utiles IS NOT NULL
+                AND s.channel_id IN (SELECT channel_id FROM tg_mentions
+                                      WHERE chain = $1 AND address = $2)) AS reputacion,
             MAX(me.tipo_senal)                                        AS tipo
        FROM tg_mentions me
        JOIN tg_messages m       ON m.id = me.message_id
-       LEFT JOIN tg_source_stats s ON s.channel_id = me.channel_id
       WHERE me.chain = $1 AND me.address = $2`,
     [chain, address],
   );
@@ -226,8 +241,8 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
   // mitad de la informacion no es informacion.
   if (!r1) return;
 
-  const t = await queryOne<{ symbol: string | null }>(
-    'SELECT symbol FROM tokens WHERE chain = $1 AND address = $2',
+  const t = await queryOne<{ id: number; symbol: string | null }>(
+    'SELECT id, symbol FROM tokens WHERE chain = $1 AND address = $2',
     [chain, address],
   );
   const primera = await queryOne<{ ts: Date }>(
@@ -317,6 +332,14 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
     return;
   }
 
+  // El interruptor de pausa del panel vale para todos los avisos. El Robot 3
+  // no lo miraba: con las alertas pausadas, las suyas seguian saliendo. Se
+  // deja sin marcar como enviado, y si al reanudar sigue cumpliendo, sale.
+  if (await isPaused()) {
+    log.info({ token: t?.symbol }, 'aviso de convergencia retenido: alertas pausadas');
+    return;
+  }
+
   const mensaje = construirAviso(
     { chain, address, symbol: t?.symbol ?? null, primeraMencion },
     r1, r2, veredicto,
@@ -325,6 +348,17 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
   const res = await notify(mensaje, {
     subject: `Alta convergencia · ${t?.symbol ?? address.slice(0, 8)}`,
   });
+
+  // Tambien al historial de alertas, como las del Robot 1. Asi sale en el
+  // panel junto a las demas y, sobre todo, el seguimiento le manda el aviso
+  // de peligro si el token se hunde despues: antes solo lo hacia con los
+  // tokens avisados por el Robot 1, y uno avisado por el Robot 3 podia
+  // desplomarse sin que nadie dijera nada.
+  if (t) {
+    await saveAlert(
+      t.id, 'convergencia', r1.opportunity, r1.risk, mensaje, res.ok, res.error, res.results,
+    );
+  }
 
   if (res.ok && fila) {
     await exec('UPDATE tg_candidatos SET enviado_at = now() WHERE id = $1', [fila.id]);

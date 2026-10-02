@@ -21,6 +21,7 @@
  * mensaje.
  */
 import { query, queryOne } from '../core/db.js';
+import type { Chain } from '../core/types.js';
 import { child } from '../core/logger.js';
 
 const log = child('anticipacion');
@@ -59,9 +60,9 @@ export interface Anticipacion {
   detalle: string;
 }
 
-interface FilaPrecio {
+export interface FilaPrecio {
   ts: Date;
-  price_usd: string | null;
+  price_usd: string | number | null;
 }
 
 /**
@@ -87,6 +88,11 @@ export async function calcularAnticipacion(
     [tokenId, desde, hasta],
   );
 
+  return medirAnticipacion(filas, mencion);
+}
+
+/** La medida en si, sobre precios ya ordenados por hora. Sin base de datos. */
+export function medirAnticipacion(filas: FilaPrecio[], mencion: Date): Anticipacion {
   if (filas.length < 3) {
     return {
       segundos: null, precioMencion: null, precioMovimiento: null, subidaPct: null,
@@ -110,13 +116,46 @@ export async function calcularAnticipacion(
   const tMencion = mencion.getTime();
 
   // Precio de referencia: la ultima medicion ANTES del mensaje. Es el
-  // precio que veia quien lo escribio.
+  // precio que veia quien lo escribio. Si el radar aun no seguia el token,
+  // la primera que hay.
   const previos = puntos.filter((p) => p.ts <= tMencion);
   const base = previos.length > 0 ? previos[previos.length - 1] : puntos[0];
+  const factor = 1 + SUBIDA_MINIMA_PCT / 100;
 
-  // Primer punto que supera el umbral respecto a esa base.
-  const umbral = base.precio * (1 + SUBIDA_MINIMA_PCT / 100);
-  const disparo = puntos.find((p) => p.precio >= umbral);
+  // 1. ¿La subida ya venia de antes del mensaje?
+  //
+  // Se busca en las horas previas el primer punto que esta un 25% por
+  // encima del minimo anterior. Antes se buscaba al reves, precios previos
+  // por ENCIMA del precio del mensaje, y eso detecta caidas, no subidas:
+  // un canal que publicaba a mitad de una subida salia como "se adelanto"
+  // en cuanto el precio seguia subiendo, y ganaba reputacion por llegar
+  // tarde, que es justo lo que esta medida tiene que destapar.
+  let minimo = previos[0];
+  for (const p of previos) {
+    if (p.precio < minimo.precio) minimo = p;
+    if (p.precio >= minimo.precio * factor) {
+      // Como mucho un segundo antes: el movimiento ya estaba en marcha al
+      // publicarse, y un 0 se leeria como "a la vez".
+      const segundos = Math.min(-1, Math.round((p.ts - tMencion) / 1000));
+      const subidaPct = ((p.precio - minimo.precio) / minimo.precio) * 100;
+      return {
+        segundos,
+        precioMencion: base.precio,
+        precioMovimiento: p.precio,
+        subidaPct: Math.round(subidaPct * 10) / 10,
+        veredicto: 'reacciono',
+        detalle:
+          `El precio ya habia subido un ${subidaPct.toFixed(0)}% ` +
+          `${Math.max(1, Math.abs(Math.round(segundos / 60)))} min antes del mensaje. ` +
+          'La fuente va por detras del mercado.',
+      };
+    }
+  }
+
+  // 2. ¿Subio despues? Primer punto POSTERIOR al mensaje que supera el
+  // umbral respecto al precio que vio quien lo escribio.
+  const umbral = base.precio * factor;
+  const disparo = puntos.find((p) => p.ts > tMencion && p.ts > base.ts && p.precio >= umbral);
 
   if (!disparo) {
     return {
@@ -132,21 +171,6 @@ export async function calcularAnticipacion(
   const segundos = Math.round((disparo.ts - tMencion) / 1000);
   const subidaPct = ((disparo.precio - base.precio) / base.precio) * 100;
 
-  // Si el disparo es anterior al mensaje, el movimiento ya estaba en marcha
-  // cuando se publico: el canal reacciono, no descubrio.
-  if (segundos < 0) {
-    return {
-      segundos,
-      precioMencion: base.precio,
-      precioMovimiento: disparo.precio,
-      subidaPct: Math.round(subidaPct * 10) / 10,
-      veredicto: 'reacciono',
-      detalle:
-        `El precio ya se habia movido ${Math.abs(Math.round(segundos / 60))} min ` +
-        `antes del mensaje. La fuente va por detras del mercado.`,
-    };
-  }
-
   return {
     segundos,
     precioMencion: base.precio,
@@ -160,49 +184,72 @@ export async function calcularAnticipacion(
 }
 
 /**
+ * Veredictos que miden algo de verdad: hubo movimiento y se sabe cuando.
+ * "sin_movimiento" y "sin_datos" no dicen nada sobre si la fuente se
+ * adelanto, y no pueden contar como anticipacion.
+ */
+export const VEREDICTOS_CON_MOVIMIENTO = ['se_adelanto', 'reacciono'] as const;
+
+/**
  * Rellena la anticipacion de las menciones que aun no la tienen.
  *
  * Se ejecuta periodicamente y no en el momento de la mencion, porque en
- * ese instante todavia no ha pasado nada que medir: hay que dejar correr
- * la ventana.
+ * ese instante todavia no ha pasado nada que medir.
+ *
+ * SE MIDE EN CUANTO SE SABE, NO A LAS 24 HORAS
+ * Antes se esperaba a que pasara la ventana entera para medir nada. Pero
+ * en cuanto el precio sube el umbral ya se sabe, y para siempre, cuando
+ * fue el movimiento: lo que pase despues no cambia ese primer cruce. Con
+ * la espera, el Robot 3 (que solo mira tokens mencionados en las ultimas
+ * 24 horas) no llegaba a ver casi nunca la anticipacion de una mencion
+ * reciente, y sin ella no puede dar el nivel maximo. Solo "no se movio" y
+ * "no hay datos" necesitan la ventana cumplida para darse por buenos.
  */
-export async function actualizarPendientes(limite = 200): Promise<number> {
-  const pendientes = await query<{ id: number; token_id: number; posted_at: Date }>(
-    `SELECT m.id, t.id AS token_id, m.posted_at
+export async function actualizarPendientes(
+  limite = 1000,
+): Promise<{ hechas: number; conMovimiento: Array<{ chain: Chain; address: string }> }> {
+  const pendientes = await query<{
+    id: number; token_id: number; chain: Chain; address: string; posted_at: Date; cumplida: boolean;
+  }>(
+    `SELECT m.id, t.id AS token_id, t.chain, t.address, m.posted_at,
+            m.posted_at < now() - ($1 || ' hours')::interval AS cumplida
        FROM tg_mentions m
        JOIN tokens t ON t.chain = m.chain AND t.address = m.address
-      WHERE m.anticipacion_seg IS NULL
-        -- Solo las que ya tienen la ventana cumplida: antes no hay nada
-        -- que medir todavia.
-        AND m.posted_at < now() - ($1 || ' hours')::interval
-      ORDER BY m.posted_at ASC
+      WHERE m.anticipacion_veredicto IS NULL
+        AND m.posted_at < now() - interval '5 minutes'
+      -- Primero las que ya se pueden cerrar, para que nunca se queden
+      -- esperando detras de las recientes; luego lo mas nuevo.
+      ORDER BY cumplida DESC, m.posted_at DESC
       LIMIT $2`,
     [VENTANA_HORAS, limite],
   );
 
   let hechas = 0;
+  const movidos = new Map<string, { chain: Chain; address: string }>();
   for (const p of pendientes) {
     const a = await calcularAnticipacion(p.token_id, new Date(p.posted_at));
-    // Se guarda el veredicto ademas del numero.
+    const conMovimiento = (VEREDICTOS_CON_MOVIMIENTO as readonly string[]).includes(a.veredicto);
+    if (!conMovimiento && !p.cumplida) continue;
+    if (conMovimiento) movidos.set(`${p.chain}:${p.address}`, { chain: p.chain, address: p.address });
+
+    // Se guarda el veredicto ademas del numero, y el numero solo cuando
+    // hubo movimiento.
     //
-    // Antes "no se movio" y "no se pudo medir" acababan los dos en 0 y
-    // eran indistinguibles. Eso hundia la reputacion de los canales: al
-    // entrar en un canal se lee su historico, y esas menciones son de
-    // cuando todavia no vigilabamos el token, asi que medirlas es
-    // imposible. Contarlas como fracasos castigaba a canales que si
-    // habian acertado.
-    const valor = a.segundos ?? 0;
+    // Antes "no se movio" y "no se pudo medir" se guardaban como 0
+    // segundos, y el Robot 3 leia ese 0 como "aparecio 0 min antes del
+    // movimiento": la mejor anticipacion posible. Asi salio un aviso de
+    // maxima prioridad sobre un token que no se habia movido.
     await queryOne(
       `UPDATE tg_mentions
           SET anticipacion_seg = $2, anticipacion_veredicto = $3
         WHERE id = $1 RETURNING id`,
-      [p.id, valor, a.veredicto],
+      [p.id, conMovimiento ? a.segundos : null, a.veredicto],
     );
     hechas++;
   }
 
-  if (hechas > 0) log.info({ hechas }, 'anticipacion calculada');
-  return hechas;
+  if (hechas > 0) log.info({ hechas, conMovimiento: movidos.size }, 'anticipacion calculada');
+  return { hechas, conMovimiento: [...movidos.values()] };
 }
 
 /**
@@ -220,7 +267,7 @@ export async function recalcularReputacion(): Promise<number> {
             COUNT(DISTINCT m.address),
             COUNT(*) FILTER (WHERE m.es_primera),
             AVG(m.anticipacion_seg) FILTER (
-              WHERE m.anticipacion_veredicto <> 'sin_datos')::int,
+              WHERE m.anticipacion_veredicto IN ('se_adelanto', 'reacciono'))::int,
             -- Lo que no se pudo medir no cuenta ni a favor ni en contra.
             -- Tenerlo en el divisor castigaba a un canal por menciones
             -- antiguas que era imposible comprobar: un canal con un

@@ -490,7 +490,8 @@ export async function dangerAlertsInLastHour(): Promise<number> {
 }
 
 /**
- * ¿Se le llego a enviar este token como oportunidad?
+ * ¿Se le llego a enviar este token como oportunidad, del Robot 1 o de alta
+ * convergencia del Robot 3?
  *
  * Importa para los avisos de peligro: advertir de que se hunde un token del
  * que nunca le hablamos no le sirve de nada, porque no lo tiene. El aviso
@@ -499,7 +500,7 @@ export async function dangerAlertsInLastHour(): Promise<number> {
  */
 export async function wasAlertedAsOpportunity(tokenId: number): Promise<boolean> {
   const row = await queryOne<{ n: number }>(
-    "SELECT COUNT(*)::int AS n FROM alerts WHERE token_id = $1 AND kind = 'oportunidad' AND sent_ok = true",
+    "SELECT COUNT(*)::int AS n FROM alerts WHERE token_id = $1 AND kind IN ('oportunidad', 'convergencia') AND sent_ok = true",
     [tokenId],
   );
   return (row?.n ?? 0) > 0;
