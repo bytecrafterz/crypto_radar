@@ -93,6 +93,10 @@ que no se copian entre si hablaron del token antes de que el precio se moviera. 
 - **Comprobado en la cadena**: lo que afirmaban los mensajes y la cadena confirma.
 - **Por que se avisa** y el enlace de compra con la direccion correcta.
 
+Como mucho llegan 3 al dia (`avisos_por_dia` en `config/robot3.yaml`). Si ese dia ya se
+enviaron los 3, o las alertas estan pausadas, el aviso espera; pero si pasan mas de 2 horas
+(`aviso_caduca_horas`) ya no se envia, porque para entonces llegaria tarde.
+
 Si un token del que llego este aviso se hunde despues, llega tambien el aviso de peligro.
 
 Las alertas del Robot 1 dicen al final si del token ya se esta hablando en Telegram (📣).

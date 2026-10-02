@@ -169,6 +169,7 @@ export interface Robot3Config {
     riesgo_maximo: number;
   };
   avisos_por_dia: number;
+  aviso_caduca_horas?: number;
 }
 export const getRobot3 = (): Robot3Config => load<Robot3Config>('robot3.yaml');
 

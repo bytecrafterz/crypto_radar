@@ -32,3 +32,12 @@ export function avisosPorDia(): number {
     return 3;
   }
 }
+
+/** Horas que puede esperar un aviso retenido por el tope o la pausa. */
+export function horasValidezAviso(): number {
+  try {
+    return getRobot3().aviso_caduca_horas ?? 2;
+  } catch {
+    return 2;
+  }
+}

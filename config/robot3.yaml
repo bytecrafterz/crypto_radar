@@ -42,3 +42,8 @@ nivel_intermedio:        # "Convergencia": interes alto con reservas, no avisa
   riesgo_maximo: 60
 
 avisos_por_dia: 3        # tope de avisos de maxima prioridad al dia
+
+# Un aviso que el tope diario o la pausa dejan retenido no sale despues si han
+# pasado mas de estas horas desde que el token llego al nivel maximo. Sin esto
+# salian todos juntos a medianoche, con horas de retraso.
+aviso_caduca_horas: 2

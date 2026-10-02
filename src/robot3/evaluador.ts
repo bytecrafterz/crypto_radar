@@ -27,7 +27,7 @@ import { escapeHtml } from '../core/util.js';
 import { decidir, describirAnticipacion, type EntradaRobot1, type EntradaRobot2 } from './convergencia.js';
 import { verificarCoherencia, type HechosCadena } from './coherencia.js';
 import { contarFuentes, type MencionFuente } from './fuentes.js';
-import { umbralesActuales, avisosPorDia } from './umbrales.js';
+import { umbralesActuales, avisosPorDia, horasValidezAviso } from './umbrales.js';
 import { AFIRMACIONES, type Afirmacion } from '../telegram/clasificador.js';
 import type { Chain } from '../core/types.js';
 
@@ -367,10 +367,31 @@ export function construirAviso(
   ].join('\n');
 }
 
+/** Tokens que se estan evaluando ahora mismo. */
+const enCurso = new Set<string>();
+
 /**
  * Evalua un token del que Telegram ha hablado y decide si avisar.
+ *
+ * UN TOKEN, UNA EVALUACION A LA VEZ
+ * Lo llaman dos vueltas: la de convergencia y la de anticipacion, en cuanto
+ * un precio se mueve. Nada mas arrancar coincidieron con el mismo token, las
+ * dos lo vieron sin avisar y las dos avisaron: HOTBOT llego dos veces el
+ * 02/10, con medio segundo de diferencia. Si ya se esta evaluando, la
+ * segunda llamada no hace nada: la primera ya lo cubre.
  */
 export async function evaluar(chain: Chain, address: string): Promise<void> {
+  const clave = `${chain}:${address}`;
+  if (enCurso.has(clave)) return;
+  enCurso.add(clave);
+  try {
+    await evaluarToken(chain, address);
+  } finally {
+    enCurso.delete(clave);
+  }
+}
+
+async function evaluarToken(chain: Chain, address: string): Promise<void> {
   // Ya se aviso de este token: su veredicto es el registro de lo que se
   // envio y no hay nada mas que decidir.
   const avisado = await queryOne<{ n: number }>(
@@ -523,6 +544,23 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
     log.debug({ token: t?.symbol, nivel: veredicto.nivel }, 'sin nivel suficiente para avisar');
     return;
   }
+  // Ya enviado por otra via mientras tanto: la fila no se ha tocado.
+  if (!fila) return;
+
+  // UN AVISO RETENIDO CADUCA
+  // Si el tope diario o la pausa lo retienen, el token sigue en el nivel
+  // maximo y antes salia en cuanto hubiera hueco: con el tope, a medianoche,
+  // todos de golpe y con horas de retraso. A esas alturas "aparecio N min
+  // antes del movimiento" ya no sirve para actuar. Cuenta desde que el token
+  // llego al nivel maximo, que es la ultima fila de su historial.
+  const enRojoDesde = await queryOne<{ ts: Date | null }>(
+    'SELECT MAX(ts) AS ts FROM tg_candidatos_historial WHERE candidato_id = $1',
+    [fila.id],
+  );
+  if (enRojoDesde?.ts && Date.now() - new Date(enRojoDesde.ts).getTime() > horasValidezAviso() * 3_600_000) {
+    log.debug({ token: t?.symbol }, 'aviso de convergencia caducado: estuvo retenido demasiado tiempo');
+    return;
+  }
 
   if ((await avisosHoy()) >= avisosPorDia()) {
     log.info({ token: t?.symbol }, 'tope diario de avisos de convergencia alcanzado');
@@ -531,20 +569,38 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
 
   // El interruptor de pausa del panel vale para todos los avisos. El Robot 3
   // no lo miraba: con las alertas pausadas, las suyas seguian saliendo. Se
-  // deja sin marcar como enviado, y si al reanudar sigue cumpliendo, sale.
+  // deja sin marcar como enviado, y si al reanudar sigue cumpliendo y no ha
+  // caducado, sale.
   if (await isPaused()) {
     log.info({ token: t?.symbol }, 'aviso de convergencia retenido: alertas pausadas');
     return;
   }
+
+  // SE MARCA ANTES DE ENVIAR
+  // Segunda barrera contra el aviso doble, por si otro proceso evalua el
+  // mismo token (un script, por ejemplo): solo envia quien consigue marcarlo.
+  // Si el envio falla se desmarca y se intenta en la vuelta siguiente.
+  const reservado = await queryOne<{ id: number }>(
+    'UPDATE tg_candidatos SET enviado_at = now() WHERE id = $1 AND enviado_at IS NULL RETURNING id',
+    [fila.id],
+  );
+  if (!reservado) return;
 
   const mensaje = construirAviso(
     { chain, address, symbol: t?.symbol ?? null, primeraMencion },
     r1, r2, veredicto, social.resumenes,
   );
 
-  const res = await notify(mensaje, {
-    subject: `Alta convergencia · ${t?.symbol ?? address.slice(0, 8)}`,
-  });
+  const desmarcar = () => exec('UPDATE tg_candidatos SET enviado_at = NULL WHERE id = $1', [fila.id]);
+  let res: Awaited<ReturnType<typeof notify>>;
+  try {
+    res = await notify(mensaje, {
+      subject: `Alta convergencia · ${t?.symbol ?? address.slice(0, 8)}`,
+    });
+  } catch (err) {
+    await desmarcar();
+    throw err;
+  }
 
   // Tambien al historial de alertas, como las del Robot 1. Asi sale en el
   // panel junto a las demas y, sobre todo, el seguimiento le manda el aviso
@@ -557,8 +613,9 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
     );
   }
 
-  if (res.ok && fila) {
-    await exec('UPDATE tg_candidatos SET enviado_at = now() WHERE id = $1', [fila.id]);
+  if (!res.ok) {
+    await desmarcar();
+  } else {
     log.info(
       { token: t?.symbol, fuentes: r2.fuentesIndependientes, oportunidad: r1.opportunity },
       'aviso de alta convergencia enviado',
@@ -566,7 +623,10 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
   }
 }
 
-const MAXIMO_POR_VUELTA = 300;
+// Una vuelta de 300 tokens tarda unos 4 segundos. Con 300 de tope se
+// quedaban fuera unos 65 tokens mencionados en cada vuelta, siempre los de
+// mencion mas antigua, que no se revisaban nunca.
+const MAXIMO_POR_VUELTA = 2000;
 
 /**
  * Repasa los tokens mencionados recientemente y los que siguen en
