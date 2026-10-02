@@ -71,7 +71,8 @@ adelante sin rehacer nada (las tablas ya existen y los datos ya se estan guardan
 |---|---|
 | Analisis profundo de insiders con grafo de financiacion | No incluido |
 | Actividad y crecimiento en X (Twitter) | No incluido — la API de X dejo de tener nivel gratuito |
-| Actividad en Telegram y Discord de terceros | No incluido |
+| Actividad en Telegram de terceros | **Incluido** con los Robots 2 y 3 (ver el manual de uso) |
+| Actividad en Discord de terceros | No incluido |
 | Clasificacion automatica de narrativa (IA, DeFi, gaming...) | No incluido |
 | Lista de wallets que historicamente aciertan | **Los datos ya se recogen**; falta la pagina que los explota |
 | Modulo de backtesting con simulacion de estrategias | **Los datos ya se recogen**; la pagina *Resultados* es la version basica |

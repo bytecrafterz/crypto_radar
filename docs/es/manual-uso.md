@@ -81,6 +81,22 @@ El sistema prefiere avisarte de lo que le falta antes que inventarse un dato.
 
 ---
 
+### El aviso de alta convergencia (Robot 3)
+
+Empieza por 🚨 **ALTA CONVERGENCIA** y llega pocas veces al dia, a proposito. Sale cuando
+coinciden las dos lecturas: los datos de la cadena son buenos y varios canales de Telegram
+que no se copian entre si hablaron del token antes de que el precio se moviera. Trae:
+
+- **Lo que dice Telegram**: cuantas fuentes independientes, cuanto se adelantaron y lo que
+  dicen los mensajes, resumido en espanol aunque el original estuviera en ingles o portugues.
+- **Lo que dicen los datos**: las notas del Robot 1.
+- **Comprobado en la cadena**: lo que afirmaban los mensajes y la cadena confirma.
+- **Por que se avisa** y el enlace de compra con la direccion correcta.
+
+Si un token del que llego este aviso se hunde despues, llega tambien el aviso de peligro.
+
+Las alertas del Robot 1 dicen al final si del token ya se esta hablando en Telegram (📣).
+
 ## 2. Avisos de peligro
 
 Ademas de las oportunidades, el sistema vigila los tokens ya detectados y avisa cuando algo
@@ -160,8 +176,46 @@ La tabla **acierto segun la puntuacion** cruza la nota que dio el sistema con lo
 despues. Si funciona bien, los tramos altos deben concentrar mas exitos y menos rugs.
 Con esos datos ajustas los umbrales con criterio, no a ojo.
 
+Al final esta **¿Acierta el Robot 3?**: que hizo el precio en las 24 horas siguientes a que
+un token llegara a cada nivel, y si los tokens de los que se habla en Telegram salen mejor o
+peor que los demas.
+
 > Esta pagina necesita tiempo. Los primeros dias estara casi vacia: cada token tarda varios
 > dias en cerrarse. A partir de la segunda o tercera semana empieza a ser util.
+
+### Telegram (Robot 2)
+Lo que el radar de Telegram esta leyendo:
+
+- **Idiomas**: de que idioma es lo que llega con informacion (espanol, portugues, ingles).
+- **Canales encontrados solo**: el sistema busca sus propias fuentes en los tres idiomas,
+  entra como mucho en tres canales al dia y sale de los que no aportan, de los que solo
+  publican publicidad, de los que llegan siempre tarde y de los que escriben en otro idioma.
+- **Fuentes**: cuantas veces cada canal hablo de un token **antes** de que el precio se
+  moviera. Es lo que da la reputacion de cada canal.
+- **Ultimos mensajes**: resumidos en espanol, con su clase (informacion, promocion o hype) y
+  el motivo. El mensaje original, en su idioma, esta plegado debajo.
+
+### Convergencia (Robot 3)
+Cada token del que se habla en Telegram y que el Robot 1 ha analizado recibe un veredicto:
+
+| Nivel | Que significa |
+|---|---|
+| Convergencia fuerte | Datos buenos, varias fuentes independientes que hablaron antes del movimiento y nada desmentido. **Es el unico nivel que avisa.** |
+| Convergencia | Datos aceptables y al menos una fuente. Merece mirarlo. |
+| Seguimiento | Se habla del token pero los datos no lo respaldan lo suficiente. |
+| Descartado | Vetado por el Robot 1 o sin datos suficientes. |
+
+En cada veredicto se ve lo que dicen los mensajes (en espanol) y **lo que se comprobo contra
+la cadena**: si un mensaje dice que la liquidez esta bloqueada y en la cadena no lo esta,
+aparece en rojo y el token no puede llegar al nivel maximo. Tambien se ve como ha ido
+cambiando el nivel y cuanto se ha movido el precio desde el veredicto. Mientras el Robot 1
+siga vigilando el token, el veredicto se sigue revisando.
+
+Una **fuente independiente** es un canal que publico algo por su cuenta. Un canal que repite
+lo de otro no cuenta, ni un canal que habla varias veces del mismo token.
+
+La ficha de cada token tiene un apartado **Telegram y Robot 3** con todas sus menciones
+resumidas en espanol y su veredicto.
 
 ### Sistema
 Configuracion activa, que fuentes se estan usando y **cuantas llamadas llevas en cada API
