@@ -134,7 +134,9 @@ export async function renderTelegram(): Promise<string> {
        LEFT JOIN msg ON msg.channel_id = c.id
        LEFT JOIN men ON men.channel_id = c.id
       ORDER BY c.active DESC, COALESCE(men.adelantadas, 0) DESC, COALESCE(men.menciones, 0) DESC
-      LIMIT 40`,
+      -- Con 40 se quedaban fuera canales que se siguen leyendo, y nunca se
+      -- veian los que se dejaron de leer: van al final.
+      LIMIT 100`,
   );
 
   const menciones = await query<FilaMencion>(
