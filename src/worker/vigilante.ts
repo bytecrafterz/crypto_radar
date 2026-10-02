@@ -51,6 +51,25 @@ export async function latir(nombre: string): Promise<void> {
   await setState(`latido:${nombre}`, Date.now()).catch(() => {});
 }
 
+/** Cuando arranco este proceso. */
+const ARRANQUE = Date.now();
+
+/**
+ * Cuanto lleva callado un bucle, contando el arranque como un latido.
+ *
+ * Sin esto, cada reinicio podia dar falsas alarmas: si el ultimo latido
+ * guardado era viejo (una copia de seguridad restaurada, un bucle al que se
+ * le cambio el intervalo), el bucle salia como "parado" antes de que le
+ * diera tiempo a dar su primera vuelta, y al cliente le llegaba un aviso de
+ * "una parte del sistema se ha parado" seguido de otro de "recuperado".
+ * Ahora cada bucle tiene, desde el arranque, el mismo margen que en
+ * marcha. Si en ese margen no da ninguna vuelta, si se avisa.
+ */
+export function silencio(ultimo: number | null, ahora: number, arranque = ARRANQUE): number | null {
+  if (ultimo === null) return null;
+  return ahora - Math.max(ultimo, arranque);
+}
+
 /** Cuanto puede estar callado un bucle antes de preocupar. */
 function margen(intervaloMs: number): number {
   return Math.max(MINIMO_MS, intervaloMs * TOLERANCIA);
@@ -82,7 +101,7 @@ export async function estadoDeLasTareas(): Promise<EstadoTarea[]> {
 
   for (const v of vigilados.values()) {
     const ultimo = await getState<number | null>(`latido:${v.nombre}`, null);
-    const callada = ultimo === null ? null : ahora - ultimo;
+    const callada = silencio(ultimo, ahora);
     const m = margen(v.intervaloMs());
     salida.push({
       nombre: v.nombre,

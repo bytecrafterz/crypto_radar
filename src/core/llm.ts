@@ -73,6 +73,21 @@ export function configLlm(): ConfigLlm | null {
   };
 }
 
+/**
+ * Apaga el razonamiento de los modelos Qwen3.
+ *
+ * Qwen3 "piensa" antes de contestar, y ese pensamiento se cobra en tokens:
+ * para clasificar un mensaje gastaba tres o cuatro veces lo que ocupa la
+ * respuesta. Con la cuota gratuita de Groq eso agotaba el limite por
+ * minuto y el clasificador se quedaba minutos esperando, con los mensajes
+ * acumulandose. Para decidir si un mensaje informa o vende, y resumirlo,
+ * no hace falta razonar. "/no_think" es la forma que tiene el propio
+ * modelo de desactivarlo; a los demas modelos no se les anade nada.
+ */
+function sinRazonar(modelo: string): string {
+  return /qwen3/i.test(modelo) ? '\n\n/no_think' : '';
+}
+
 export function hayModelo(): boolean {
   return configLlm() !== null;
 }
@@ -165,7 +180,7 @@ export async function preguntar(
           max_tokens: maxTokens,
           temperature: 0,
           messages: [
-            { role: 'system', content: instruccion },
+            { role: 'system', content: instruccion + sinRazonar(c.modelo) },
             { role: 'user', content: texto },
           ],
         },

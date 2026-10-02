@@ -130,7 +130,10 @@ export interface Veredicto {
 export function leerRespuesta(texto: string | null): Veredicto | null {
   if (!texto) return null;
 
-  const trozo = texto.match(/\{[\s\S]*?\}/);
+  // Si el modelo razona en voz alta, el razonamiento va entre <think> y
+  // puede llevar llaves que no son la respuesta.
+  const limpio = texto.replace(/<think>[\s\S]*?<\/think>/g, '');
+  const trozo = limpio.match(/\{[\s\S]*?\}/);
   if (!trozo) return null;
 
   try {
@@ -208,7 +211,11 @@ export async function runClasificador(): Promise<number> {
     `SELECT id, text, clasificacion_intentos FROM tg_messages
       WHERE triage = 'candidato' AND clasificado_at IS NULL AND text IS NOT NULL
         AND clasificacion_intentos < $2
-      ORDER BY posted_at DESC
+      -- Primero los que nombran un token ya identificado: son los que
+      -- cuentan como fuentes para el Robot 3. La cuota del modelo es
+      -- limitada y no debe irse en mensajes que no llevan a nada.
+      ORDER BY EXISTS (SELECT 1 FROM tg_mentions me WHERE me.message_id = tg_messages.id) DESC,
+               posted_at DESC
       LIMIT $1`,
     [POR_VUELTA, INTENTOS_MAXIMOS],
   );

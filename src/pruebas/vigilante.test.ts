@@ -8,7 +8,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { describirTiempo } from '../worker/vigilante.js';
+import { describirTiempo, silencio } from '../worker/vigilante.js';
 
 test('el tiempo se dice en singular cuando es uno solo', () => {
   // "1 horas" en un aviso que lee el cliente queda mal y se nota.
@@ -27,4 +27,16 @@ test('el tiempo se dice en la unidad que se entiende de un vistazo', () => {
 test('el caso real que lo destapo se lee bien', () => {
   // El Robot 2 estuvo callado unas 44 horas.
   assert.equal(describirTiempo(44 * 60 * 60_000), '44 horas');
+});
+
+test('un latido viejo no da falsa alarma nada mas arrancar', () => {
+  // Paso de verdad: tras restaurar una copia, el ultimo latido era de hacia
+  // 23 dias y el cliente recibio avisos de "parado" en el primer minuto.
+  const arranque = 1_000_000_000;
+  const hace23dias = arranque - 23 * 24 * 60 * 60_000;
+  assert.equal(silencio(hace23dias, arranque + 60_000, arranque), 60_000);
+  // Un latido posterior al arranque se cuenta tal cual.
+  assert.equal(silencio(arranque + 10_000, arranque + 70_000, arranque), 60_000);
+  // Sin latido todavia, no se acusa.
+  assert.equal(silencio(null, arranque + 60_000, arranque), null);
 });

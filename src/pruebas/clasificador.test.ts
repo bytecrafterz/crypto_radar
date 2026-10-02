@@ -63,3 +63,26 @@ test('un entero normal no se toca', () => {
   // devuelven los modelos en la practica.
   assert.equal(leerRespuesta('{"clase":"hype","confianza":0,"motivo":"x"}')?.confianza, 0);
 });
+
+test('lee el resumen en espanol, el idioma, el tipo y las afirmaciones', () => {
+  const v = leerRespuesta(
+    '{"clase":"informacion","confianza":80,"motivo":"datos concretos","idioma":"pt",' +
+      '"tipo":"listing","resumen":"Afirma que la liquidez esta bloqueada 6 meses.",' +
+      '"afirmaciones":["liquidez_bloqueada","sin_permisos"]}',
+  );
+  assert.equal(v?.idioma, 'pt');
+  assert.equal(v?.tipo, 'listing');
+  assert.equal(v?.resumen, 'Afirma que la liquidez esta bloqueada 6 meses.');
+  assert.deepEqual(v?.afirmaciones, ['liquidez_bloqueada', 'sin_permisos']);
+});
+
+test('solo acepta afirmaciones de la lista: lo inventado no se puede comprobar', () => {
+  const v = leerRespuesta('{"clase":"promocion","confianza":70,"motivo":"x","afirmaciones":["va_a_subir","sin_impuestos"]}');
+  assert.deepEqual(v?.afirmaciones, ['sin_impuestos']);
+  assert.equal(v?.tipo, 'general', 'sin tipo valido, general');
+});
+
+test('el razonamiento entre <think> no se confunde con la respuesta', () => {
+  const v = leerRespuesta('<think>Veamos {esto no es la respuesta}</think>{"clase":"hype","confianza":60,"motivo":"solo entusiasmo"}');
+  assert.equal(v?.clase, 'hype');
+});
