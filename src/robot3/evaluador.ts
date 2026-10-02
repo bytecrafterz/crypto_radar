@@ -498,8 +498,15 @@ export async function evaluar(chain: Chain, address: string): Promise<void> {
 
   // SEGUIMIENTO: cada cambio de nivel queda apuntado con su precio. Es lo
   // que deja ver como evoluciona una oportunidad y medir despues cuanto
-  // acerto cada nivel.
-  if (fila && antes?.nivel !== veredicto.nivel) {
+  // acerto cada nivel. Los veredictos de antes del historial reciben su
+  // primera fila aunque no cambien: sin un punto de partida no se pueden
+  // medir.
+  const sinHistorial = fila
+    ? !(await queryOne<{ n: number }>(
+        'SELECT 1 AS n FROM tg_candidatos_historial WHERE candidato_id = $1 LIMIT 1', [fila.id],
+      ))
+    : false;
+  if (fila && (antes?.nivel !== veredicto.nivel || sinHistorial)) {
     await exec(
       `INSERT INTO tg_candidatos_historial
          (candidato_id, nivel, nivel_antes, score_tecnica, score_riesgo, fuentes_indep, precio_usd)
