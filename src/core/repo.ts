@@ -4,6 +4,7 @@
  * que es lo que permite hacer backtesting mas adelante.
  */
 import { query, queryOne, exec } from './db.js';
+import { acotarCambio, importeValido, TOPE_PRECIO_USD } from './limites.js';
 import type {
   Chain,
   DiscoveredPair,
@@ -102,9 +103,9 @@ export async function upsertToken(pair: DiscoveredPair): Promise<StoredToken> {
       pair.telegram,
       pair.discord,
       pair.imageUrl,
-      pair.liquidityUsd,
-      pair.marketCapUsd,
-      pair.priceUsd,
+      importeValido(pair.liquidityUsd),
+      importeValido(pair.marketCapUsd),
+      importeValido(pair.priceUsd, TOPE_PRECIO_USD),
     ],
   );
 
@@ -188,24 +189,24 @@ export async function insertSnapshot(
      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
     [
       tokenId,
-      pair.priceUsd,
-      pair.marketCapUsd,
-      pair.fdvUsd,
-      pair.liquidityUsd,
-      pair.volumeM5,
-      pair.volumeH1,
-      pair.volumeH6,
-      pair.volumeH24,
+      importeValido(pair.priceUsd, TOPE_PRECIO_USD),
+      importeValido(pair.marketCapUsd),
+      importeValido(pair.fdvUsd),
+      importeValido(pair.liquidityUsd),
+      importeValido(pair.volumeM5),
+      importeValido(pair.volumeH1),
+      importeValido(pair.volumeH6),
+      importeValido(pair.volumeH24),
       pair.txnsM5Buys,
       pair.txnsM5Sells,
       pair.txnsH1Buys,
       pair.txnsH1Sells,
       pair.txnsH24Buys,
       pair.txnsH24Sells,
-      pair.priceChangeM5,
-      pair.priceChangeH1,
-      pair.priceChangeH6,
-      pair.priceChangeH24,
+      acotarCambio(pair.priceChangeM5),
+      acotarCambio(pair.priceChangeH1),
+      acotarCambio(pair.priceChangeH6),
+      acotarCambio(pair.priceChangeH24),
       extra.holdersCount ?? null,
       extra.top10Pct ?? null,
       extra.source ?? pair.source,

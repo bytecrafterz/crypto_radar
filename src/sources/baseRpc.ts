@@ -300,11 +300,14 @@ export interface RawLog {
  */
 function limiteDeRango(mensaje: string): number | null {
   const patrones =
-    /block range|range is too large|up to a \d+ block|too many results|response size|too large|too big|limit exceeded|query returned more than/i;
+    /block range|range is too large|up to a \d+ block|too many results|max results|response size|too large|too big|limit exceeded|query returned more than/i;
   if (!patrones.test(mensaje)) return null;
   // Muchos proveedores dicen el maximo exacto: "up to a 10 block range".
   const m = mensaje.match(/up to a (\d+) block/i) ?? mensaje.match(/maximum of (\d+) blocks?/i);
-  return m ? Number(m[1]) : 0; // 0 = hay que reducir, pero no dice cuanto
+  if (m) return Number(m[1]);
+  // publicnode propone el rango que si cabe: "retry with the range 100-289".
+  const r = mensaje.match(/retry with the range (\d+)-(\d+)/i);
+  return r ? Math.max(10, Number(r[2]) - Number(r[1]) + 1) : 0; // 0 = reducir, sin saber cuanto
 }
 
 export interface TransferLogsResult {
@@ -409,6 +412,119 @@ export function decodeTransfers(logs: RawLog[]): TransferEvent[] {
     }
   }
   return out;
+}
+
+// --- Transferencias por la API de Alchemy -----------------------------------
+//
+// Las transferencias se leian con eth_getLogs en el RPC publico de Base, y
+// desde el 05/10 responde "request limit reached" a casi todo: desde el 09/10
+// ningun token de Base tenia lista de holders. Alchemy no vale para
+// eth_getLogs en el plan gratuito (10 bloques por consulta), pero su API de
+// transferencias si: da la historia entera del token, 1.000 por pagina, a 120
+// CU la pagina. Un token nuevo cabe en una sola.
+
+const TRANSFERS_PROVIDER = 'alchemy_transfers';
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+interface AlchemyTransfer {
+  from: string;
+  to: string | null;
+  blockNum: string;
+  hash: string;
+  uniqueId?: string;
+  rawContract?: { value?: string | null };
+}
+
+export interface LecturaTransferencias {
+  transfers: TransferEvent[];
+  /** true si se leyo todo el rango, sin huecos. */
+  complete: boolean;
+  blocksMissing: number;
+  /** true si la lectura empezo en el bloque 0: incluye la creacion del token. */
+  desdeElPrincipio: boolean;
+}
+
+async function transferenciasAlchemy(
+  token: string,
+  fromBlock: number,
+  toBlock: number,
+  maxPaginas: number,
+): Promise<Omit<LecturaTransferencias, 'desdeElPrincipio'> | null> {
+  const endpoint = `https://base-mainnet.g.alchemy.com/v2/${env.alchemyKey}`;
+  const out: TransferEvent[] = [];
+  let pageKey: string | undefined;
+
+  for (let pagina = 0; pagina < maxPaginas; pagina++) {
+    let res: { transfers?: AlchemyTransfer[]; pageKey?: string };
+    try {
+      res = await rpcCall(endpoint, TRANSFERS_PROVIDER, 'alchemy_getAssetTransfers', [
+        {
+          fromBlock: toHex(fromBlock),
+          toBlock: toHex(toBlock),
+          contractAddresses: [token],
+          category: ['erc20'],
+          withMetadata: false,
+          excludeZeroValue: false,
+          maxCount: '0x3e8',
+          order: 'asc',
+          ...(pageKey ? { pageKey } : {}),
+        },
+      ]);
+    } catch (err) {
+      log.warn({ token, err: String(err) }, 'transferencias de Alchemy fallaron; se prueba con eth_getLogs');
+      return null;
+    }
+
+    for (const t of res?.transfers ?? []) {
+      try {
+        out.push({
+          from: t.from.toLowerCase(),
+          to: (t.to ?? ZERO_ADDRESS).toLowerCase(),
+          value: BigInt(t.rawContract?.value ?? '0x0'),
+          blockNumber: parseInt(t.blockNum, 16),
+          txHash: t.hash,
+          logIndex: Number(t.uniqueId?.split(':log:')[1] ?? 0),
+        });
+      } catch {
+        // Valor ilegible: se ignora, como en decodeTransfers.
+      }
+    }
+
+    pageKey = res?.pageKey;
+    if (!pageKey) return { transfers: out, complete: true, blocksMissing: 0 };
+  }
+
+  // Quedan paginas: se leyo desde el principio hasta el ultimo bloque visto.
+  const ultimo = out.length > 0 ? out[out.length - 1].blockNumber : fromBlock;
+  return { transfers: out, complete: false, blocksMissing: Math.max(0, toBlock - ultimo) };
+}
+
+/**
+ * Transferencias del token: por Alchemy si hay clave, y si falla, por
+ * eth_getLogs como antes.
+ *
+ * Con `desdeElPrincipio`, Alchemy lee desde el bloque 0, que le cuesta lo
+ * mismo y asegura la creacion del token. eth_getLogs no puede: leeria todo
+ * Base por tramos.
+ */
+export async function getTransferEvents(
+  token: string,
+  fromBlock: number,
+  toBlock: number,
+  opts: { chunkSize: number; maxChunks: number; maxPaginas?: number; desdeElPrincipio?: boolean },
+): Promise<LecturaTransferencias> {
+  if (env.hasAlchemy) {
+    const desde = opts.desdeElPrincipio ? 0 : fromBlock;
+    const r = await transferenciasAlchemy(token, desde, toBlock, opts.maxPaginas ?? 10);
+    if (r) return { ...r, desdeElPrincipio: desde === 0 };
+  }
+  const lectura = await getTransferLogs(token, fromBlock, toBlock, opts.chunkSize, opts.maxChunks);
+  return {
+    transfers: decodeTransfers(lectura.logs),
+    complete: lectura.complete,
+    blocksMissing: lectura.blocksMissing,
+    desdeElPrincipio: false,
+  };
 }
 
 /**

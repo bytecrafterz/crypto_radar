@@ -5,7 +5,7 @@
  * Todo lo que se lee aqui es verificable por cualquiera en un explorador,
  * que es justo lo que pidio el cliente.
  */
-import { rpcCall, rpcBatch, request } from '../core/http.js';
+import { rpcCall, rpcBatch, request, HttpError } from '../core/http.js';
 import { env } from '../core/env.js';
 import { child } from '../core/logger.js';
 import { base58Encode } from '../core/util.js';
@@ -18,6 +18,79 @@ export const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
 
 function url(): string {
   return env.solanaRpcUrl;
+}
+
+// --- Helius sin creditos ----------------------------------------------------
+//
+// El plan gratuito de Helius trae 1 millon de creditos al mes. En octubre se
+// agotaron el dia 7 y desde entonces respondia "max usage reached" a todo: el
+// analisis de Solana se quedo sin suministro, sin holders y sin creador. Ahora,
+// cuando pasa, las llamadas normales van al RPC publico (lo que se usaba antes
+// de tener clave) y cada hora se vuelve a probar Helius, por si ya cambio el
+// mes. Lo que solo tiene Helius (holders completos, transacciones
+// enriquecidas) se salta hasta entonces.
+
+const RPC_PUBLICO = 'https://api.mainnet-beta.solana.com';
+const PROVIDER_PUBLICO = 'solana_publico';
+const VOLVER_A_PROBAR_MS = 60 * 60_000;
+
+let heliusAgotadoHasta = 0;
+
+/** ¿Helius dijo hace poco que no le quedan creditos? */
+export function heliusAgotado(): boolean {
+  return Date.now() < heliusAgotadoHasta;
+}
+
+function sinCreditos(err: unknown): boolean {
+  return err instanceof HttpError && err.status === 429 && /max usage/i.test(err.body);
+}
+
+function marcarAgotado(): void {
+  if (!heliusAgotado()) {
+    log.warn('Helius sin creditos este mes: se usa el RPC publico de Solana y se vuelve a probar en una hora');
+  }
+  heliusAgotadoHasta = Date.now() + VOLVER_A_PROBAR_MS;
+}
+
+/** Solo se cambia de RPC cuando la llamada iba a Helius. */
+const vaAHelius = (destino: string, provider: string) =>
+  env.hasHelius && provider === PROVIDER && destino === env.solanaRpcUrl;
+
+/** rpcCall, pero si Helius no tiene creditos pregunta al RPC publico. */
+async function rpcSolana<T>(
+  destino: string,
+  provider: string,
+  method: string,
+  params: unknown[] | Record<string, unknown>,
+): Promise<T> {
+  if (!vaAHelius(destino, provider)) return rpcCall<T>(destino, provider, method, params);
+  if (!heliusAgotado()) {
+    try {
+      return await rpcCall<T>(destino, provider, method, params);
+    } catch (err) {
+      if (!sinCreditos(err)) throw err;
+      marcarAgotado();
+    }
+  }
+  return rpcCall<T>(RPC_PUBLICO, PROVIDER_PUBLICO, method, params);
+}
+
+/** rpcBatch con el mismo cambio de RPC. */
+async function rpcBatchSolana<T>(
+  destino: string,
+  provider: string,
+  calls: Array<{ method: string; params: unknown[] }>,
+): Promise<Array<T | null>> {
+  if (!vaAHelius(destino, provider)) return rpcBatch<T>(destino, provider, calls);
+  if (!heliusAgotado()) {
+    try {
+      return await rpcBatch<T>(destino, provider, calls);
+    } catch (err) {
+      if (!sinCreditos(err)) throw err;
+      marcarAgotado();
+    }
+  }
+  return rpcBatch<T>(RPC_PUBLICO, PROVIDER_PUBLICO, calls);
 }
 
 // --- Informacion del mint -------------------------------------------------
@@ -59,7 +132,7 @@ interface ParsedMintValue {
  */
 export async function getMintInfo(mint: string): Promise<MintInfo | null> {
   try {
-    const res = await rpcCall<{ value: ParsedMintValue | null }>(url(), PROVIDER, 'getAccountInfo', [
+    const res = await rpcSolana<{ value: ParsedMintValue | null }>(url(), PROVIDER, 'getAccountInfo', [
       mint,
       { encoding: 'jsonParsed', commitment: 'confirmed' },
     ]);
@@ -100,7 +173,7 @@ export async function getMintInfo(mint: string): Promise<MintInfo | null> {
  *   50-82 freeze authority (32 bytes)
  */
 export async function getMintInfoRaw(mint: string): Promise<MintInfo | null> {
-  const res = await rpcCall<{ value: { data?: [string, string]; owner?: string } | null }>(
+  const res = await rpcSolana<{ value: { data?: [string, string]; owner?: string } | null }>(
     url(),
     PROVIDER,
     'getAccountInfo',
@@ -154,7 +227,7 @@ export interface LargestAccount {
  * Despues resolvemos los duenos con una segunda llamada por lotes.
  */
 export async function getTokenLargestAccounts(mint: string): Promise<LargestAccount[]> {
-  const res = await rpcCall<{
+  const res = await rpcSolana<{
     value: Array<{ address: string; amount: string; decimals: number; uiAmount: number }>;
   }>(url(), PROVIDER, 'getTokenLargestAccounts', [mint, { commitment: 'confirmed' }]).catch(
     (err) => {
@@ -185,7 +258,7 @@ export async function getTokenAccountOwners(
   const out = new Map<string, string>();
   if (tokenAccounts.length === 0) return out;
 
-  const res = await rpcCall<{
+  const res = await rpcSolana<{
     value: Array<{ data?: { parsed?: { info?: { owner?: string } } } } | null>;
   }>(url(), PROVIDER, 'getMultipleAccounts', [
     tokenAccounts.slice(0, 100),
@@ -204,7 +277,7 @@ export async function getTokenAccountOwners(
 export async function getTokenSupply(
   mint: string,
 ): Promise<{ amount: string; decimals: number; uiAmount: number } | null> {
-  const res = await rpcCall<{ value: { amount: string; decimals: number; uiAmount: number } }>(
+  const res = await rpcSolana<{ value: { amount: string; decimals: number; uiAmount: number } }>(
     url(),
     PROVIDER,
     'getTokenSupply',
@@ -218,16 +291,16 @@ export async function getTokenSupply(
  * Sin clave devolvemos null: preferimos no dar un dato inventado.
  */
 export async function getHolderCountHelius(mint: string, maxPages = 5): Promise<number | null> {
-  if (!env.hasHelius) return null;
+  if (!env.hasHelius || heliusAgotado()) return null;
   const endpoint = `https://mainnet.helius-rpc.com/?api-key=${env.heliusKey}`;
   const owners = new Set<string>();
   let cursor: string | undefined;
 
   for (let page = 0; page < maxPages; page++) {
-    const res = await rpcCall<{
+    const res = await rpcSolana<{
       token_accounts?: Array<{ owner?: string; amount?: number | string }>;
       cursor?: string;
-    }>(endpoint, PROVIDER, 'getTokenAccounts', {
+    }>(endpoint, 'helius_das', 'getTokenAccounts', {
       mint,
       limit: 1000,
       options: { showZeroBalance: false },
@@ -256,16 +329,16 @@ export async function getAllHoldersHelius(
   mint: string,
   maxPages = 5,
 ): Promise<Array<{ owner: string; amount: bigint }> | null> {
-  if (!env.hasHelius) return null;
+  if (!env.hasHelius || heliusAgotado()) return null;
   const endpoint = `https://mainnet.helius-rpc.com/?api-key=${env.heliusKey}`;
   const totals = new Map<string, bigint>();
   let cursor: string | undefined;
 
   for (let page = 0; page < maxPages; page++) {
-    const res = await rpcCall<{
+    const res = await rpcSolana<{
       token_accounts?: Array<{ owner?: string; amount?: number | string }>;
       cursor?: string;
-    }>(endpoint, PROVIDER, 'getTokenAccounts', {
+    }>(endpoint, 'helius_das', 'getTokenAccounts', {
       mint,
       limit: 1000,
       options: { showZeroBalance: false },
@@ -311,7 +384,7 @@ export async function getSignatures(
   if (opts.before) params.before = opts.before;
   if (opts.until) params.until = opts.until;
 
-  const res = await rpcCall<SignatureInfo[]>(url(), PROVIDER, 'getSignaturesForAddress', [
+  const res = await rpcSolana<SignatureInfo[]>(url(), PROVIDER, 'getSignaturesForAddress', [
     address,
     params,
   ]).catch((err) => {
@@ -352,7 +425,7 @@ export interface TxSummary {
 }
 
 export async function getTransaction(signature: string): Promise<TxSummary | null> {
-  const res = await rpcCall<{
+  const res = await rpcSolana<{
     slot: number;
     blockTime: number | null;
     transaction?: { message?: { accountKeys?: Array<{ pubkey: string; signer: boolean }> } };
@@ -417,7 +490,7 @@ export async function getEnrichedTransactions(
   address: string,
   opts: { limit?: number; before?: string; type?: string } = {},
 ): Promise<EnrichedTx[] | null> {
-  if (!env.hasHelius) return null;
+  if (!env.hasHelius || heliusAgotado()) return null;
   const params = new URLSearchParams({ 'api-key': env.heliusKey });
   if (opts.limit) params.set('limit', String(opts.limit));
   if (opts.before) params.set('before', opts.before);
@@ -425,7 +498,7 @@ export async function getEnrichedTransactions(
 
   const res = await request<EnrichedTx[]>(
     `https://api.helius.xyz/v0/addresses/${address}/transactions?${params.toString()}`,
-    { provider: PROVIDER, retries: 1, timeoutMs: 25_000 },
+    { provider: 'helius_enriquecidas', retries: 1, timeoutMs: 25_000 },
   ).catch((err) => {
     log.warn({ address, err: String(err) }, 'transacciones enriquecidas de Helius fallaron');
     return null;
@@ -436,7 +509,7 @@ export async function getEnrichedTransactions(
 
 /** Balance en SOL de una direccion (para ver si el creador tiene fondos). */
 export async function getBalance(address: string): Promise<number | null> {
-  const res = await rpcCall<{ value: number }>(url(), PROVIDER, 'getBalance', [
+  const res = await rpcSolana<{ value: number }>(url(), PROVIDER, 'getBalance', [
     address,
     { commitment: 'confirmed' },
   ]).catch(() => null);
@@ -447,7 +520,7 @@ export async function getBalance(address: string): Promise<number | null> {
 export async function getMultipleBalances(addresses: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   if (addresses.length === 0) return out;
-  const results = await rpcBatch<{ value: number }>(
+  const results = await rpcBatchSolana<{ value: number }>(
     url(),
     PROVIDER,
     addresses.slice(0, 50).map((a) => ({ method: 'getBalance', params: [a, { commitment: 'confirmed' }] })),

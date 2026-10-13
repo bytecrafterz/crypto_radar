@@ -240,16 +240,14 @@ export async function analyzeBaseHolders(
   // justo se marcaria como parcial sin serlo.
   const maxChunks = Math.ceil(blocksToRead / chunkSize) + 1;
 
-  const lectura = await base.getTransferLogs(
-    pair.tokenAddress,
-    fromBlock,
-    currentBlock,
+  const lectura = await base.getTransferEvents(pair.tokenAddress, fromBlock, currentBlock, {
     chunkSize,
     maxChunks,
-  );
-  const logs = lectura.logs;
+    desdeElPrincipio: true,
+  });
+  const transfers = lectura.transfers;
 
-  if (logs.length === 0) {
+  if (transfers.length === 0) {
     return {
       chain: 'base',
       tokenAddress: pair.tokenAddress,
@@ -264,14 +262,13 @@ export async function analyzeBaseHolders(
     };
   }
 
-  const transfers = base.decodeTransfers(logs);
   const balances = base.balancesFromTransfers(transfers);
 
   // Para poder decir que la lista es EXACTA hacen falta dos cosas: haber
   // empezado en el bloque de creacion Y haber leido todos los tramos sin
   // huecos. Con un solo tramo perdido, un traspaso grande puede no aparecer
   // y la concentracion sale mal. Antes solo se miraba el bloque de inicio.
-  const exact = deployBlock !== null && lectura.complete;
+  const exact = (deployBlock !== null || lectura.desdeElPrincipio) && lectura.complete;
 
   const sorted = [...balances.entries()].sort((a, b) => (b[1] > a[1] ? 1 : b[1] < a[1] ? -1 : 0));
 
@@ -289,9 +286,11 @@ export async function analyzeBaseHolders(
   const note = [
     exact
       ? `Lista reconstruida desde la creacion del token (${transfers.length} transferencias).`
-      : !lectura.complete
-        ? `Lista INCOMPLETA: no se pudieron leer ${lectura.blocksMissing} bloques de ${blocksToRead} (${transfers.length} transferencias leidas). Los porcentajes pueden estar mal.`
-        : `Lista reconstruida sobre los ultimos ${blocksToRead} bloques (${transfers.length} transferencias): puede ser aproximada.`,
+      : !lectura.complete && lectura.desdeElPrincipio
+        ? `Lista INCOMPLETA: el token tiene mas de ${transfers.length} transferencias y solo se leyeron esas. Los porcentajes pueden estar mal.`
+        : !lectura.complete
+          ? `Lista INCOMPLETA: no se pudieron leer ${lectura.blocksMissing} bloques de ${blocksToRead} (${transfers.length} transferencias leidas). Los porcentajes pueden estar mal.`
+          : `Lista reconstruida sobre los ultimos ${blocksToRead} bloques (${transfers.length} transferencias): puede ser aproximada.`,
     pooled.length > 0
       ? `Se descontaron ${pooled.length} direcciones que no son holders reales (${pooledPct.toFixed(1)}% del suministro).`
       : '',

@@ -30,7 +30,20 @@ export const PROVIDER_LIMITS: Record<string, ProviderLimits> = {
   dexscreener: { rps: 4, perDay: 0, concurrency: 3 },
   geckoterminal: { rps: 0.5, perDay: 0, concurrency: 1 },
   solana_rpc: { rps: 8, perDay: 0, concurrency: 4 },
+  // RPC publico de Solana, solo cuando Helius se queda sin creditos. Admite
+  // 100 peticiones cada 10 s por IP y 40 por metodo: se va muy por debajo.
+  solana_publico: { rps: 3, perDay: 0, concurrency: 2 },
+  // Las llamadas caras de Helius, con tope diario para que el millon de
+  // creditos gratuitos llegue a fin de mes. En octubre se agoto el dia 7.
+  //   DAS (lista de holders): 10 creditos  -> 1.000 al dia = 10.000 creditos
+  //   transacciones enriquecidas: 100     ->    80 al dia =  8.000 creditos
+  // Con las ~12.000 llamadas normales (1 credito) salen unos 30.000 al dia.
+  helius_das: { rps: 2, perDay: 1_000, concurrency: 2 },
+  helius_enriquecidas: { rps: 1, perDay: 80, concurrency: 1 },
   base_rpc: { rps: 8, perDay: 0, concurrency: 4 },
+  // Historia de transferencias de Alchemy (120 CU por pagina). Tope para no
+  // comerse el plan gratuito, que comparte con base_rpc.
+  alchemy_transfers: { rps: 1, perDay: 2_000, concurrency: 1 },
   // Host distinto al de base_rpc: necesita su propio cubo de peticiones.
   base_logs: { rps: 4, perDay: 0, concurrency: 2 },
   rugcheck: { rps: 1, perDay: 0, concurrency: 1 },
@@ -233,7 +246,10 @@ export async function request<T = unknown>(
         const penalty = retryAfter > 0 ? retryAfter * 1000 : Math.min(2000 * 2 ** attempt, 60_000);
         st.cooldownUntil = Date.now() + penalty;
         log.warn({ provider: opts.provider, status: res.status, penalty }, 'limite alcanzado, esperando');
-        lastError = new HttpError(res.status, opts.provider, '');
+        // El cuerpo distingue "vas demasiado rapido" de "se acabo el plan del
+        // mes" ("max usage reached" en Helius), que se tratan distinto.
+        const cuerpo = await res.text().catch(() => '');
+        lastError = new HttpError(res.status, opts.provider, cuerpo.slice(0, 300));
         continue;
       }
 

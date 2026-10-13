@@ -189,10 +189,13 @@ export async function detectSniperClusterBase(
   const from = deployBlock ?? Math.max(0, currentBlock - 3000);
   const to = Math.min(currentBlock, from + 300); // primeros ~10 minutos
 
-  const { logs } = await base.getTransferLogs(pair.tokenAddress, from, to, 300, 2);
-  if (logs.length === 0) return null;
+  const { transfers } = await base.getTransferEvents(pair.tokenAddress, from, to, {
+    chunkSize: 300,
+    maxChunks: 2,
+    maxPaginas: 2,
+  });
+  if (transfers.length === 0) return null;
 
-  const transfers = base.decodeTransfers(logs);
   const pool = pair.pairAddress.toLowerCase();
 
   // Agrupamos por bloque las compras (salidas desde el pool hacia wallets).
@@ -235,10 +238,13 @@ export async function detectWashTradingBase(
   if (currentBlock === null) return null;
 
   const from = Math.max(deployBlock ?? 0, currentBlock - 2000);
-  const { logs } = await base.getTransferLogs(pair.tokenAddress, from, currentBlock, 1000, 2);
-  if (logs.length < 20) return null;
+  const { transfers } = await base.getTransferEvents(pair.tokenAddress, from, currentBlock, {
+    chunkSize: 1000,
+    maxChunks: 2,
+    maxPaginas: 2,
+  });
+  if (transfers.length < 20) return null;
 
-  const transfers = base.decodeTransfers(logs);
   const pool = pair.pairAddress.toLowerCase();
 
   // Contamos cuantas veces cada wallet compra Y vende.
