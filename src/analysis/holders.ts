@@ -12,6 +12,7 @@ import { nonHolderAddresses, burnAddresses, getFilters } from '../core/config.js
 import { env } from '../core/env.js';
 import * as solana from '../sources/solanaRpc.js';
 import * as base from '../sources/baseRpc.js';
+import * as rugcheck from '../sources/rugcheck.js';
 import { formatUnits } from '../core/util.js';
 
 const log = child('holders');
@@ -117,50 +118,69 @@ export async function analyzeSolanaHolders(
     }));
     note = `Lista completa de holders (${full.length} direcciones).`;
   } else {
-    // Camino gratuito: las 20 mayores cuentas en una sola llamada RPC.
-    const largest = await solana.getTokenLargestAccounts(pair.tokenAddress);
-    if (largest.length === 0) {
-      return {
-        chain: 'solana',
-        tokenAddress: pair.tokenAddress,
-        holdersCount: null,
-        top10Pct: null,
-        top20Pct: null,
-        largestRealPct: null,
-        deployerPct: null,
-        holders: [],
-        partial: true,
-        note: 'El RPC no devolvio las mayores cuentas del token.',
-      };
-    }
+    // Camino gratuito: las 20 mayores cuentas en una sola llamada RPC. El RPC
+    // publico la rechaza siempre ("Too many requests for a specific RPC
+    // call"), asi que sin creditos de Helius ni se intenta.
+    const largest = solana.heliusAgotado() ? [] : await solana.getTokenLargestAccounts(pair.tokenAddress);
 
-    entries = largest.map((a) => {
-      const owner = a.owner ?? a.tokenAccount;
-      let amount = 0n;
-      try {
-        amount = BigInt(a.amount);
-      } catch {
-        amount = 0n;
+    if (largest.length > 0) {
+      entries = largest.map((a) => {
+        const owner = a.owner ?? a.tokenAccount;
+        let amount = 0n;
+        try {
+          amount = BigInt(a.amount);
+        } catch {
+          amount = 0n;
+        }
+        return {
+          address: owner,
+          balance: amount.toString(),
+          pct: Number((amount * 10000n) / totalSupply) / 100,
+          tag: tagFor(owner, 'solana', pair.pairAddress, deployer),
+        };
+      });
+
+      // El total de holders solo se puede contar con la API DAS de Helius.
+      holdersCount = await solana.getHolderCountHelius(pair.tokenAddress);
+      if (holdersCount !== null) {
+        note = `Top 20 analizado, ${holdersCount} holders en total.`;
+      } else if (env.hasHelius) {
+        note = 'Top 20 analizado. No se pudo contar el total de holders (la API no respondio).';
+      } else {
+        note = 'Solo top 20 (sin clave de Helius no se puede contar el total de holders).';
       }
-      return {
-        address: owner,
-        balance: amount.toString(),
-        pct: Number((amount * 10000n) / totalSupply) / 100,
-        tag: tagFor(owner, 'solana', pair.pairAddress, deployer),
-      };
-    });
-
-    // El total de holders solo se puede contar con la API DAS de Helius.
-    holdersCount = await solana.getHolderCountHelius(pair.tokenAddress);
-    if (holdersCount !== null) {
-      note = `Top 20 analizado, ${holdersCount} holders en total.`;
-    } else if (env.hasHelius) {
-      note = 'Top 20 analizado. No se pudo contar el total de holders (la API no respondio).';
     } else {
-      note = 'Solo top 20 (sin clave de Helius no se puede contar el total de holders).';
+      // Sin RPC: las mismas 20 mayores cuentas salen del informe de RugCheck,
+      // que ademas trae el total de holders. Desde el 07/10 al 13/10, con
+      // Helius sin creditos, casi ningun token de Solana tuvo este dato.
+      const rc = await rugcheck.getReport(pair.tokenAddress);
+      if (!rc || rc.topHolders.length === 0) {
+        return {
+          chain: 'solana',
+          tokenAddress: pair.tokenAddress,
+          holdersCount: null,
+          top10Pct: null,
+          top20Pct: null,
+          largestRealPct: null,
+          deployerPct: null,
+          holders: [],
+          partial: true,
+          note: 'Ni el RPC ni RugCheck devolvieron las mayores cuentas del token.',
+        };
+      }
+      entries = rc.topHolders.map((h) => ({
+        address: h.owner,
+        balance: h.amount,
+        pct: Math.round(h.pct * 100) / 100,
+        tag: tagFor(h.owner, 'solana', pair.pairAddress, deployer),
+      }));
+      holdersCount = rc.totalHolders;
+      note =
+        holdersCount !== null
+          ? `Top 20 segun RugCheck, ${holdersCount} holders en total.`
+          : 'Top 20 segun RugCheck.';
     }
   }
-
   const conc = computeConcentration(entries, deployer, 'solana');
   const pooled = entries.filter((e) => e.tag !== 'wallet' && e.tag !== 'creador');
   if (pooled.length > 0) {
