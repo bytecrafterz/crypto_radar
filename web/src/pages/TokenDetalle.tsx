@@ -240,7 +240,14 @@ export default function TokenDetalle() {
         </Section>
       )}
 
-      <Section title="Evolucion" sub="Mediciones del seguimiento de las ultimas 72 horas.">
+      <Section
+        title="Evolucion"
+        sub={
+          q.data.serieDesdeDeteccion
+            ? 'Mediciones del seguimiento en las primeras 72 horas desde la deteccion.'
+            : 'Mediciones del seguimiento de las ultimas 72 horas.'
+        }
+      >
         <div className="grid grid--3">
           <ChartCard title="Precio" points={q.data.serie.map((p) => ({ ts: p.ts, value: p.price }))} format={(v) => fmtPrice(v)} />
           <ChartCard title="Liquidez" points={q.data.serie.map((p) => ({ ts: p.ts, value: p.liquidity }))} format={(v) => fmtUsd(v)} />

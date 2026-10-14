@@ -18,6 +18,13 @@ export async function datosToken(chain: string, address: string) {
   const token = await repo.getToken(chain as StoredToken['chain'], address);
   if (!token) return null;
 
+  // Un token de hace mas de tres dias ya no tiene nada en las ultimas 72
+  // horas (el seguimiento acaba antes) y el grafico salia vacio. Se ensenan
+  // entonces las 72 horas que siguen a la deteccion, que es cuando llegan los
+  // avisos y se mueve el precio.
+  const HORAS_SERIE = 72;
+  const serieDesdeDeteccion = Date.now() - token.first_seen.getTime() > HORAS_SERIE * 3_600_000;
+
   const [security, holders, deployer, score, suspicious, series, horizons, cambios, telegram] =
     await Promise.all([
       repo.getLatestSecurity(token.id),
@@ -25,7 +32,7 @@ export async function datosToken(chain: string, address: string) {
       repo.getLatestDeployer(token.id),
       repo.getLatestScore(token.id),
       repo.getSuspicious(token.id, 25),
-      repo.getSnapshotSeries(token.id, 72),
+      repo.getSnapshotSeries(token.id, HORAS_SERIE, serieDesdeDeteccion ? token.first_seen : undefined),
       tracking.getHorizons(token.id),
       tracking.getSecurityChanges(token.id),
       datosTelegramToken(token.chain, token.address),
@@ -122,6 +129,7 @@ export async function datosToken(chain: string, address: string) {
         }
       : null,
     sospechosos: suspicious.map((s) => ({ ts: iso(s.ts), kind: s.kind, severity: s.severity, detail: s.detail })),
+    serieDesdeDeteccion,
     serie: series.map((s) => ({
       ts: iso(s.ts),
       price: num(s.price_usd),

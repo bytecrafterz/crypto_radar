@@ -226,16 +226,33 @@ export async function getRecentSnapshots(tokenId: number, limit = 50): Promise<S
   );
 }
 
+/**
+ * Serie de mediciones de un token: las ultimas `hours` horas o, con
+ * `desde`, las `hours` horas que siguen a ese momento.
+ *
+ * Con un seguimiento de varios dias hay miles de puntos (uno por vuelta);
+ * se reparten de forma uniforme hasta `maxPuntos` para que el grafico no
+ * cargue de mas sin perder la forma.
+ */
 export async function getSnapshotSeries(
   tokenId: number,
   hours = 24,
+  desde?: Date,
+  maxPuntos = 600,
 ): Promise<Array<{ ts: Date; price_usd: number | null; liquidity_usd: number | null; market_cap_usd: number | null; holders_count: number | null }>> {
   return query(
-    `SELECT ts, price_usd, liquidity_usd, market_cap_usd, holders_count
-       FROM token_snapshots
-      WHERE token_id = $1 AND ts > now() - ($2 || ' hours')::interval
+    `WITH serie AS (
+       SELECT ts, price_usd, liquidity_usd, market_cap_usd, holders_count,
+              ROW_NUMBER() OVER (ORDER BY ts) AS n, COUNT(*) OVER () AS total
+         FROM token_snapshots
+        WHERE token_id = $1
+          AND ($3::timestamptz IS NULL AND ts > now() - ($2 || ' hours')::interval
+               OR ts >= $3::timestamptz AND ts < $3::timestamptz + ($2 || ' hours')::interval)
+     )
+     SELECT ts, price_usd, liquidity_usd, market_cap_usd, holders_count FROM serie
+      WHERE total <= $4 OR (n - 1) % CEIL(total::numeric / $4)::int = 0 OR n = total
       ORDER BY ts ASC`,
-    [tokenId, String(hours)],
+    [tokenId, String(hours), desde ?? null, maxPuntos],
   );
 }
 

@@ -34,3 +34,12 @@ test('sin ninguna vuelta todavia: arrancando, no parado', () => {
   assert.equal(estadoDeRobot([tarea('robot3-convergencia', null)]).estado, 'arrancando');
   assert.equal(estadoDeRobot([]).estado, 'arrancando');
 });
+
+test('la ficha ensena la primera mencion de cada canal aunque haya muchas de otro', async () => {
+  const { elegirMenciones } = await import('../web/datos/telegram.js');
+  const m = (canal: string, n: number) => ({ canal, n });
+  const todas = [m('a', 1), m('b', 2), m('c', 3), ...Array.from({ length: 20 }, (_, i) => m('c', 4 + i))];
+  const vistas = elegirMenciones(todas, 5);
+  assert.deepEqual(vistas.map((x) => x.n), [1, 2, 3, 22, 23]);
+  assert.deepEqual(elegirMenciones([m('a', 1), m('a', 2)], 15).map((x) => x.n), [1, 2]);
+});

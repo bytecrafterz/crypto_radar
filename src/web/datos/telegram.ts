@@ -226,6 +226,28 @@ export async function datosDescubiertos(q: Record<string, string | undefined>) {
  * Lo que se dijo de un token en Telegram y lo que decidio el Robot 3, para
  * la ficha del token: los tres robots se ven juntos en un solo sitio.
  */
+/**
+ * Que menciones se ensenan en la ficha de un token, en orden de llegada.
+ *
+ * Antes salian las diez ultimas, y en un token muy comentado eran todas del
+ * mismo canal: no se veian las primeras de cada canal, que son justo las que
+ * cuentan como fuentes independientes para el Robot 3. Ahora va siempre la
+ * primera de cada canal y el resto del hueco se llena con las mas recientes.
+ */
+export function elegirMenciones<T extends { canal: string | null }>(menciones: T[], maximo = 15): T[] {
+  const elegidas = new Set<T>();
+  const vistos = new Set<string>();
+  for (const m of menciones) {
+    const canal = m.canal ?? '?';
+    if (!vistos.has(canal)) {
+      vistos.add(canal);
+      elegidas.add(m);
+    }
+  }
+  for (let i = menciones.length - 1; i >= 0 && elegidas.size < maximo; i--) elegidas.add(menciones[i]);
+  return menciones.filter((m) => elegidas.has(m));
+}
+
 export async function datosTelegramToken(chain: string, address: string) {
   const menciones = await query<{
     canal: string | null; posted_at: Date; resumen_es: string | null; clasificacion: string | null;
@@ -266,7 +288,7 @@ export async function datosTelegramToken(chain: string, address: string) {
           contradicciones: v.detalle?.contradicciones ?? [],
         }
       : null,
-    menciones: menciones.slice(-10).reverse().map((m) => ({
+    menciones: elegirMenciones(menciones).map((m) => ({
       canal: m.canal,
       postedAt: iso(m.posted_at),
       resumen: m.resumen_es,
