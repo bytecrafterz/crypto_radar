@@ -1,37 +1,35 @@
 /**
  * Panel web.
  *
- * Paginas generadas en el servidor: no hay compilacion, ni dependencias
- * externas, ni JavaScript en el navegador. Arranca en un segundo y funciona
- * en el servidor mas barato.
+ * El panel es una aplicacion aparte (carpeta web/, React) que se compila a
+ * dist/panel con `npm run build`. Este servidor la entrega tal cual y le
+ * sirve los datos por la API de api.ts. Ningun dato sale sin sesion: la
+ * aplicacion en si no lleva datos, solo los pide.
  */
 import Fastify, { type FastifyRequest, type FastifyReply } from 'fastify';
 import cookie from '@fastify/cookie';
-import formbody from '@fastify/formbody';
+import fastifyStatic from '@fastify/static';
 import { createHmac, timingSafeEqual, randomBytes } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { env } from '../core/env.js';
 import { getState, setState } from '../core/db.js';
 import { child } from '../core/logger.js';
 import * as repo from '../core/repo.js';
 import * as dexscreener from '../sources/dexscreener.js';
-import { renderTelegram } from './telegram-page.js';
-import { renderRobot3 } from './robot3-page.js';
 import { enrichToken } from '../worker/enrichment.js';
 import { getUsage } from '../core/http.js';
-import {
-  renderLogin,
-  renderDashboard,
-  renderTokens,
-  renderTokenDetail,
-  renderAlerts,
-  renderResults,
-  renderSystem,
-} from './pages.js';
-import { page } from './layout.js';
-import { escapeHtml } from '../core/util.js';
+import { registrarApiPanel } from './api.js';
 
 const log = child('panel');
 const COOKIE = 'radar_sesion';
+
+/**
+ * Donde queda la aplicacion compilada. La misma ruta vale ejecutando desde
+ * src/ (tsx) y desde dist/: en los dos casos la raiz esta dos niveles arriba.
+ */
+const PANEL_DIR = path.resolve(fileURLToPath(new URL('../../', import.meta.url)), 'dist/panel');
 
 /**
  * Sal aleatoria propia de esta instalacion.
@@ -73,13 +71,45 @@ function isAuthenticated(req: FastifyRequest): boolean {
   }
 }
 
-// Rutas que NO pasan por el guardian de sesion del panel.
+/** Comparacion en tiempo constante, para no dar pistas por lo que tarda. */
+function iguales(a: string, b: string): boolean {
+  return (
+    a.length === b.length &&
+    timingSafeEqual(Buffer.from(a.padEnd(64, '\0').slice(0, 64)), Buffer.from(b.padEnd(64, '\0').slice(0, 64)))
+  );
+}
+
+// API que NO pasa por el guardian de sesion.
 //
 // /api/candidato no es publica: lleva su propia autenticacion por cabecera
 // (x-api-secret), porque quien la llama es otro programa, no una persona
-// con navegador y cookie de sesion. Se excluye aqui para que el guardian
-// no la corte antes de llegar a su propia comprobacion.
-const PUBLIC_PATHS = new Set(['/entrar', '/salud', '/health', '/api/candidato']);
+// con navegador y cookie de sesion.
+const API_PUBLICA = new Set(['/api/candidato']);
+
+/**
+ * Intentos fallidos de entrar, por IP.
+ *
+ * El panel esta en internet: sin freno, se pueden probar contrasenas sin
+ * limite. A los 8 fallos en 15 minutos se deja de comprobar hasta que pasen.
+ */
+const MAX_FALLOS = 8;
+const VENTANA_FALLOS_MS = 15 * 60_000;
+const fallos = new Map<string, { n: number; hasta: number }>();
+
+function bloqueado(ip: string): boolean {
+  const f = fallos.get(ip);
+  return f !== undefined && f.hasta > Date.now() && f.n >= MAX_FALLOS;
+}
+
+function apuntarFallo(ip: string): void {
+  const ahora = Date.now();
+  if (fallos.size > 5_000) {
+    for (const [k, v] of fallos) if (v.hasta <= ahora) fallos.delete(k);
+  }
+  const f = fallos.get(ip);
+  if (f && f.hasta > ahora) f.n++;
+  else fallos.set(ip, { n: 1, hasta: ahora + VENTANA_FALLOS_MS });
+}
 
 export async function buildServer() {
   await loadSessionSalt();
@@ -97,36 +127,33 @@ export async function buildServer() {
   const app = Fastify({ logger: false, trustProxy: true });
 
   await app.register(cookie, { secret: env.sessionSecret });
-  await app.register(formbody);
 
   // --- Autenticacion ------------------------------------------------------
+  // Solo se protege la API: la aplicacion del panel no lleva datos, y es
+  // ella la que ensena la pantalla de acceso cuando la API responde 401.
   app.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
-    if (PUBLIC_PATHS.has(req.url.split('?')[0])) return;
+    const ruta = req.url.split('?')[0];
+    if (!ruta.startsWith('/api/')) return;
+    if (API_PUBLICA.has(ruta)) return;
+    if (ruta === '/api/panel/sesion' && req.method === 'POST') return;
     if (isAuthenticated(req)) return;
-    if (req.url.startsWith('/api/')) {
-      return reply.code(401).send({ error: 'No autorizado' });
-    }
-    return reply.type('text/html; charset=utf-8').send(renderLogin());
+    return reply.code(401).send({ error: 'No autorizado' });
   });
 
-  app.post('/entrar', async (req: FastifyRequest, reply: FastifyReply) => {
-    const body = (req.body ?? {}) as { password?: string };
-    const given = body.password ?? '';
+  app.post('/api/panel/sesion', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (bloqueado(req.ip)) {
+      return reply.code(429).send({ error: 'Demasiados intentos. Vuelve a probar en unos minutos.' });
+    }
+    const body = (req.body ?? {}) as { password?: unknown };
+    const dada = typeof body.password === 'string' ? body.password : '';
 
-    const ok =
-      given.length === env.panelPassword.length &&
-      timingSafeEqual(
-        Buffer.from(given.padEnd(64, '\0').slice(0, 64)),
-        Buffer.from(env.panelPassword.padEnd(64, '\0').slice(0, 64)),
-      );
-
-    if (!ok) {
+    if (!iguales(dada, env.panelPassword)) {
+      apuntarFallo(req.ip);
       log.warn({ ip: req.ip }, 'intento de acceso fallido');
-      return reply
-        .type('text/html; charset=utf-8')
-        .send(renderLogin('Contrasena incorrecta.'));
+      return reply.code(401).send({ error: 'Contrasena incorrecta.' });
     }
 
+    fallos.delete(req.ip);
     reply.setCookie(COOKIE, sessionToken(), {
       path: '/',
       httpOnly: true,
@@ -134,65 +161,24 @@ export async function buildServer() {
       secure: req.protocol === 'https',
       maxAge: 60 * 60 * 24 * 30,
     });
-    return reply.redirect('/');
+    return { ok: true };
   });
 
+  // Comprueba si la sesion sigue valida (el guardian ya respondio 401 si no).
+  app.get('/api/panel/sesion', async () => ({ ok: true }));
+
+  app.delete('/api/panel/sesion', async (_req: FastifyRequest, reply: FastifyReply) => {
+    reply.clearCookie(COOKIE, { path: '/' });
+    return { ok: true };
+  });
+
+  // Enlaces antiguos de salida: siguen funcionando.
   app.get('/salir', async (_req: FastifyRequest, reply: FastifyReply) => {
     reply.clearCookie(COOKIE, { path: '/' });
     return reply.redirect('/entrar');
   });
 
-  app.get('/entrar', async (_req: FastifyRequest, reply: FastifyReply) =>
-    reply.type('text/html; charset=utf-8').send(renderLogin()),
-  );
-
-  // --- Paginas ------------------------------------------------------------
-  const html = (reply: FastifyReply, content: string) =>
-    reply.type('text/html; charset=utf-8').send(content);
-
-  app.get('/', async (_req, reply) => html(reply, await renderDashboard()));
-
-  app.get('/tokens', async (req, reply) =>
-    html(reply, await renderTokens((req.query ?? {}) as Record<string, string>)),
-  );
-
-  app.get('/token/:chain/:address', async (req, reply) => {
-    const { chain, address } = req.params as { chain: string; address: string };
-    const content = await renderTokenDetail(chain, address);
-    if (!content) {
-      return reply
-        .code(404)
-        .type('text/html; charset=utf-8')
-        .send(
-          page(
-            { title: 'No encontrado', active: 'tokens' },
-            '<div class="empty"><h1>Token no encontrado</h1><p>Ese token no esta en la base de datos.</p><p><a href="/tokens">Volver al listado</a></p></div>',
-          ),
-        );
-    }
-    return html(reply, content);
-  });
-
-  app.get('/alertas', async (_req, reply) => html(reply, await renderAlerts()));
-  app.get('/resultados', async (_req, reply) => html(reply, await renderResults()));
-  app.get('/sistema', async (_req, reply) => html(reply, await renderSystem()));
-  app.get('/telegram', async (_req, reply) => html(reply, await renderTelegram()));
-  app.get('/convergencia', async (_req, reply) => html(reply, await renderRobot3()));
-
-  /**
-   * Pausar o reanudar los avisos desde el panel.
-   *
-   * Con Discord por webhook no hay comandos de vuelta, asi que sin esto el
-   * usuario no tiene ninguna forma de silenciar su movil por su cuenta.
-   * Pausar NO detiene el analisis: solo deja de enviar mensajes.
-   */
-  app.post('/avisos', async (req: FastifyRequest, reply: FastifyReply) => {
-    const body = (req.body ?? {}) as { accion?: string };
-    const pausar = body.accion === 'pausar';
-    await setState('alertas_pausadas', pausar);
-    log.info({ pausar }, pausar ? 'avisos pausados desde el panel' : 'avisos reanudados desde el panel');
-    return reply.redirect('/sistema');
-  });
+  registrarApiPanel(app);
 
   /**
    * Entrada de candidatos desde fuera (Robot 2 / Robot 3).
@@ -215,9 +201,7 @@ export async function buildServer() {
       return reply.code(503).send({ error: 'API_SHARED_SECRET no configurado' });
     }
     const dado = String(req.headers['x-api-secret'] ?? '');
-    if (dado.length !== secreto.length ||
-        !timingSafeEqual(Buffer.from(dado.padEnd(64, '\0').slice(0, 64)),
-                         Buffer.from(secreto.padEnd(64, '\0').slice(0, 64)))) {
+    if (!iguales(dado, secreto)) {
       log.warn({ ip: req.ip }, 'candidato rechazado: secreto invalido');
       return reply.code(401).send({ error: 'no autorizado' });
     }
@@ -323,32 +307,42 @@ export async function buildServer() {
   app.get('/salud', async () => ({ ok: true, ts: new Date().toISOString() }));
   app.get('/health', async () => ({ ok: true, ts: new Date().toISOString() }));
 
-  app.setNotFoundHandler(async (_req, reply) =>
-    reply
-      .code(404)
-      .type('text/html; charset=utf-8')
-      .send(
-        page(
-          { title: 'No encontrado' },
-          '<div class="empty"><h1>Pagina no encontrada</h1><p><a href="/">Volver al inicio</a></p></div>',
-        ),
-      ),
-  );
+  // --- La aplicacion del panel ---------------------------------------------
+  const compilado = existsSync(path.join(PANEL_DIR, 'index.html'));
+  if (compilado) {
+    await app.register(fastifyStatic, {
+      root: PANEL_DIR,
+      prefix: '/',
+      wildcard: false,
+      index: false,
+      setHeaders: (res, ruta) => {
+        // Lo de assets/ lleva un resumen del contenido en el nombre: puede
+        // guardarse un ano. El resto, siempre la version del servidor.
+        res.setHeader(
+          'Cache-Control',
+          ruta.includes(`${path.sep}assets${path.sep}`) ? 'public, max-age=31536000, immutable' : 'no-cache',
+        );
+      },
+    });
+  } else {
+    log.warn({ carpeta: PANEL_DIR }, 'el panel no esta compilado: ejecuta npm run build');
+  }
+
+  // Cualquier otra ruta es una pagina del panel: la decide la aplicacion.
+  app.setNotFoundHandler(async (req, reply) => {
+    if (req.method !== 'GET' || req.url.startsWith('/api/')) {
+      return reply.code(404).send({ error: 'No encontrado' });
+    }
+    if (!compilado) {
+      return reply.code(503).type('text/plain; charset=utf-8').send('Panel sin compilar: ejecuta npm run build.');
+    }
+    return reply.header('Cache-Control', 'no-cache').sendFile('index.html');
+  });
 
   app.setErrorHandler(async (err: unknown, _req, reply) => {
     const message = err instanceof Error ? err.message : String(err);
     log.error({ err: message }, 'error en el panel');
-    return reply
-      .code(500)
-      .type('text/html; charset=utf-8')
-      .send(
-        page(
-          { title: 'Error' },
-          `<div class="empty"><h1>Algo ha fallado</h1>
-           <p class="dim small">${escapeHtml(message)}</p>
-           <p><a href="/">Volver al inicio</a></p></div>`,
-        ),
-      );
+    return reply.code(500).send({ error: 'Error interno del panel' });
   });
 
   return app;

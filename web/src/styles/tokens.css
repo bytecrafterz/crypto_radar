@@ -1,0 +1,130 @@
+/*
+ * Tokens del sistema de diseno. Todo el panel se escribe contra estos
+ * nombres: para cambiar un color o un espaciado se cambia aqui y en ningun
+ * otro sitio.
+ *
+ * El tema oscuro es el de por defecto; el claro se aplica con
+ * data-theme="light" en <html> (lo pone index.html antes de pintar).
+ *
+ * Los colores de los graficos estan validados contra estas superficies con
+ * el comprobador de paletas (contraste >= 3:1, banda de luminosidad).
+ */
+:root {
+  color-scheme: dark;
+
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+  /* Escala de espaciado: multiplos de 4. */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+
+  /* Tipografia */
+  --fs-xs: 11px;
+  --fs-sm: 12.5px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 26px;
+  --fs-3xl: 32px;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+
+  --sidebar-w: 244px;
+  --topbar-h: 60px;
+  --content-max: 1360px;
+
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --dur: 160ms;
+
+  /* Superficies (oscuro) */
+  --bg: #0b0e13;
+  --surface: #12161d;
+  --surface-2: #171c24;
+  --surface-3: #1e242e;
+  --overlay: rgba(4, 6, 10, 0.62);
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.13);
+
+  /* Texto */
+  --text: #e8edf3;
+  --text-2: #a8b1bd;
+  --text-3: #788292;
+
+  /* Acento de marca: el mismo azul que la serie 1 de los graficos. */
+  --accent: #3987e5;
+  --accent-hover: #5598e7;
+  --accent-soft: rgba(57, 135, 229, 0.14);
+  --accent-track: #184f95;
+  --on-accent: #ffffff;
+  --focus: rgba(57, 135, 229, 0.55);
+
+  /* Estados: siempre con icono o texto al lado, nunca el color solo. */
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  --neutral: #788292;
+
+  /* Texto de las insignias de estado, legible sobre su fondo tintado. */
+  --good-ink: #4cc95a;
+  --warning-ink: #f2c04a;
+  --serious-ink: #f2a07c;
+  --critical-ink: #f27d7d;
+  --info-ink: #75acef;
+  --violet-ink: #a99ff0;
+
+  /* Graficos */
+  --series-1: #3987e5;
+  --chart-grid: #222934;
+  --chart-axis: #788292;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #f3f5f8;
+  --surface-3: #e9edf2;
+  --overlay: rgba(15, 23, 42, 0.38);
+  --border: rgba(15, 23, 42, 0.09);
+  --border-strong: rgba(15, 23, 42, 0.16);
+
+  --text: #0f172a;
+  --text-2: #475569;
+  --text-3: #6b7686;
+
+  --accent: #2a78d6;
+  --accent-hover: #256abf;
+  --accent-soft: rgba(42, 120, 214, 0.1);
+  --accent-track: #cde2fb;
+  --focus: rgba(42, 120, 214, 0.45);
+
+  --good-ink: #0b7a16;
+  --warning-ink: #8a5a00;
+  --serious-ink: #ad4a1f;
+  --critical-ink: #b32626;
+  --info-ink: #1f63b8;
+  --violet-ink: #5244c2;
+  --neutral: #8a94a3;
+
+  --series-1: #2a78d6;
+  --chart-grid: #e6e9ee;
+  --chart-axis: #6b7686;
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+}
