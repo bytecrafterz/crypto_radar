@@ -137,6 +137,16 @@ Estos avisos son los que evitan que te quedes dentro de un proyecto que se esta 
 
 ## 4. El panel web
 
+Funciona igual en el ordenador y en el movil (en el movil, el menu se abre con el boton de
+arriba a la izquierda). Arriba a la derecha estan el cambio de tema claro / oscuro, el
+estado de los avisos y la salida. El buscador de la barra superior encuentra un token por su
+simbolo, su nombre o su direccion.
+
+Las tablas largas van por paginas, con el numero de filas a elegir abajo. Los filtros y la
+pagina quedan en la direccion del navegador: una vista filtrada se puede guardar en
+favoritos o compartir, y el boton de volver deshace el ultimo cambio. Cada grafico tiene un
+boton para ver los mismos datos en forma de tabla.
+
 ### Resumen
 Cuantos tokens se han detectado, analizado y descartado hoy, las mejores oportunidades del
 momento, las ultimas alertas y la actividad del sistema.
