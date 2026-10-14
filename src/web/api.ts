@@ -24,6 +24,26 @@ const log = child('panel');
 type Consulta = Record<string, string | undefined>;
 const consulta = (req: FastifyRequest): Consulta => (req.query ?? {}) as Consulta;
 
+/**
+ * Respuestas caras que cambian despacio, guardadas un rato.
+ *
+ * Resultados recorre todo el historico (unos 5 segundos) y sus cifras solo
+ * cambian cuando se cierra un token. Sin esto, cada visita y cada pestana
+ * abierta repetirian la misma consulta pesada contra la base de datos.
+ */
+const guardadas = new Map<string, { hasta: number; valor: Promise<unknown> }>();
+
+function guardada<T>(clave: string, ms: number, calcular: () => Promise<T>): Promise<T> {
+  const ahora = Date.now();
+  const g = guardadas.get(clave);
+  if (g && g.hasta > ahora) return g.valor as Promise<T>;
+  const valor = calcular();
+  guardadas.set(clave, { hasta: ahora + ms, valor });
+  // Un fallo no se guarda: la siguiente visita lo vuelve a intentar.
+  valor.catch(() => guardadas.delete(clave));
+  return valor;
+}
+
 export function registrarApiPanel(app: FastifyInstance): void {
   // Para la barra superior: si los avisos estan pausados y si algun robot se ha parado.
   app.get('/api/panel/estado', async () => {
@@ -31,7 +51,7 @@ export function registrarApiPanel(app: FastifyInstance): void {
     return { pausado, tareasCaidas: tareas.filter((t) => t.caida).map((t) => t.nombre) };
   });
 
-  app.get('/api/panel/resumen', async () => datosResumen());
+  app.get('/api/panel/resumen', async () => guardada('resumen', 20_000, datosResumen));
   app.get('/api/panel/tokens', async (req) => datosTokens(consulta(req)));
 
   app.get('/api/panel/token/:chain/:address', async (req: FastifyRequest, reply: FastifyReply) => {
@@ -43,7 +63,7 @@ export function registrarApiPanel(app: FastifyInstance): void {
   });
 
   app.get('/api/panel/alertas', async (req) => datosAlertas(consulta(req)));
-  app.get('/api/panel/resultados', async () => datosResultados());
+  app.get('/api/panel/resultados', async () => guardada('resultados', 5 * 60_000, datosResultados));
 
   app.get('/api/panel/telegram', async () => datosTelegramResumen());
   app.get('/api/panel/telegram/fuentes', async (req) => datosFuentes(consulta(req)));

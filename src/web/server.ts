@@ -315,6 +315,8 @@ export async function buildServer() {
       prefix: '/',
       wildcard: false,
       index: false,
+      // Sin esto el plugin pone su propio "max-age=0" encima del de abajo.
+      cacheControl: false,
       setHeaders: (res, ruta) => {
         // Lo de assets/ lleva un resumen del contenido en el nombre: puede
         // guardarse un ano. El resto, siempre la version del servidor.
