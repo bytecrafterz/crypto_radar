@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Crypto Radar - Los tres robots en funcionamiento</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+
+  * {
+    box-sizing: border-box;
+    /* Sin esto Chrome elimina los fondos de color al imprimir. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 10.2pt;
+    line-height: 1.55;
+    color: #1a1d21;
+    margin: 0;
+  }
+
+  h1 { font-size: 20pt; margin: 0 0 4pt; letter-spacing: -0.4pt; }
+  h2 {
+    font-size: 14pt;
+    margin: 0 0 9pt;
+    padding-bottom: 4pt;
+    border-bottom: 1.5pt solid #1f6feb;
+    color: #0b2e6f;
+    page-break-after: avoid;
+  }
+  h2 .num { color: #1f6feb; margin-right: 4pt; }
+  h3 { font-size: 11pt; margin: 13pt 0 5pt; color: #24292f; page-break-after: avoid; }
+  p { margin: 0 0 7pt; }
+  ul { margin: 0 0 8pt; padding-left: 15pt; }
+  li { margin-bottom: 3pt; }
+  a { color: #0b5cd5; text-decoration: none; word-break: break-all; }
+  b, strong { font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; margin: 6pt 0 11pt; font-size: 9.3pt; }
+  th {
+    background: #eef2f7;
+    text-align: left;
+    padding: 4.5pt 7pt;
+    border: 0.5pt solid #c9d3e0;
+    font-weight: 600;
+  }
+  td { padding: 4.5pt 7pt; border: 0.5pt solid #d8dee6; vertical-align: top; }
+  tr { page-break-inside: avoid; }
+  td.n, th.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  td.hora { white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  .portada {
+    text-align: center;
+    padding: 58mm 0 0;
+    page-break-after: always;
+  }
+  .portada .marca { font-size: 32pt; font-weight: 700; letter-spacing: -1pt; }
+  .portada .marca span { color: #1f6feb; }
+  .portada .linea { width: 60mm; height: 2pt; background: #1f6feb; margin: 14pt auto; }
+  .portada .sub { font-size: 14pt; color: #24292f; margin-top: 4pt; font-weight: 600; }
+  .portada .sub2 { font-size: 10.5pt; color: #57606a; margin-top: 5pt; }
+  .portada .pie { margin-top: 26mm; font-size: 9.5pt; color: #6e7781; line-height: 1.7; }
+
+  .capitulo { page-break-before: always; }
+  .juntos { page-break-inside: avoid; }
+
+  .aviso {
+    border-left: 3pt solid #1f6feb;
+    background: #f5f8fc;
+    padding: 7pt 11pt;
+    margin: 9pt 0;
+    page-break-inside: avoid;
+  }
+  .aviso.ambar { border-left-color: #bf8700; background: #fffaf0; }
+  .aviso.verde { border-left-color: #1a7f37; background: #f3fbf5; }
+  .aviso p:last-child, .aviso ul:last-child { margin-bottom: 0; }
+
+  figure {
+    margin: 8pt 0 12pt;
+    page-break-inside: avoid;
+  }
+  figure img {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    max-height: 108mm;
+    margin: 0 auto;
+    border: 0.6pt solid #d0d7de;
+    border-radius: 4pt;
+  }
+  thead { display: table-header-group; }
+  figure.media img { width: 62%; margin: 0 auto; }
+  figure.estrecha img { width: 82%; margin: 0 auto; }
+  figcaption { font-size: 8.6pt; color: #57606a; margin-top: 4pt; line-height: 1.45; }
+  figcaption b { color: #24292f; }
+
+  .pill { display: inline-block; padding: 0.5pt 7pt; border-radius: 8pt; font-size: 8.6pt; font-weight: 600; white-space: nowrap; }
+  .p-ok { background: #d5f5dd; color: #0a6b2b; }
+  .p-parcial { background: #fdf0cd; color: #7a5900; }
+  .p-no { background: #eceff3; color: #4b535d; }
+  .p-rojo { background: #ffe3e0; color: #97121a; }
+  .p-naranja { background: #fdf0cd; color: #7a5900; }
+  .p-azul { background: #dcebff; color: #0b4cad; }
+  .p-gris { background: #eceff3; color: #4b535d; }
+
+  /* Esquema del circuito de los tres robots */
+  .flujo { display: grid; grid-template-columns: 1fr 30pt 1fr; gap: 0; align-items: center; margin: 10pt 0 14pt; page-break-inside: avoid; }
+  .robot {
+    border: 1pt solid #c9d3e0; border-radius: 5pt; padding: 8pt 10pt; background: #fbfcfe;
+  }
+  .robot .t { font-weight: 700; color: #0b2e6f; font-size: 10.5pt; }
+  .robot .d { font-size: 9pt; color: #3d444d; margin-top: 2pt; line-height: 1.45; }
+  .robot.r3 { grid-column: 1 / span 3; margin-top: 8pt; border-color: #1f6feb; background: #f2f7ff; }
+  .flecha { text-align: center; color: #1f6feb; font-size: 15pt; font-weight: 700; }
+  .baja { grid-column: 1 / span 3; text-align: center; color: #1f6feb; font-size: 9pt; font-weight: 600; margin-top: 6pt; }
+
+  .cifras { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7pt; margin: 8pt 0 12pt; page-break-inside: avoid; }
+  .cifra { border: 0.6pt solid #d0d7de; border-radius: 4pt; padding: 7pt 9pt; }
+  .cifra .k { font-size: 8.4pt; color: #57606a; }
+  .cifra .v { font-size: 15pt; font-weight: 700; letter-spacing: -0.3pt; color: #0b2e6f; }
+  .cifra .h { font-size: 8.2pt; color: #6e7781; }
+</style>
+</head>
+<body>
+
+<!-- ======================================================= PORTADA -->
+<div class="portada">
+  <div class="marca">Crypto <span>Radar</span></div>
+  <div class="linea"></div>
+  <div class="sub">Los tres robots en funcionamiento</div>
+  <div class="sub2">Donde ver cada robot, como decide cada uno, un token real de principio a fin<br>y lo que dicen los resultados medidos</div>
+  <div class="pie">
+    Datos reales del sistema a 14 y 15 de octubre de 2026.<br>
+    Todas las capturas son del panel en funcionamiento: https://crypto-radar.duckdns.org<br>
+    Horas en hora de Madrid.
+  </div>
+</div>
+
+<!-- ======================================================= RESUMEN -->
+<h2>El sistema en una pagina</h2>
+
+<p>Son tres robots que comparten una misma base de datos y un mismo panel. El Robot 1 y el Robot 2 trabajan a la vez, cada uno por su lado, todo el dia. El Robot 3 junta lo que dicen los dos sobre el mismo token y decide.</p>
+
+<div class="flujo">
+  <div class="robot">
+    <div class="t">Robot 1 · Busqueda general</div>
+    <div class="d">Detecta tokens nuevos en Solana y Base, los analiza a fondo y les pone dos notas, oportunidad y riesgo, con los motivos escritos. Envia sus propios avisos de oportunidad y de peligro.</div>
+  </div>
+  <div class="flecha">&#8644;</div>
+  <div class="robot">
+    <div class="t">Robot 2 · Telegram</div>
+    <div class="d">Lee canales de Telegram, busca canales nuevos por su cuenta, separa la informacion del ruido y anota que tokens se mencionan, donde y cuando. Cada token que encuentra se lo pasa al Robot 1 para que lo analice.</div>
+  </div>
+  <div class="baja">&#8595; las dos lecturas del mismo token &#8595;</div>
+  <div class="robot r3">
+    <div class="t">Robot 3 · Comparacion y seleccion</div>
+    <div class="d">Pone una lectura al lado de la otra, sin mezclarlas en una sola nota, comprueba que no se contradigan y le da a cada token un nivel. Solo el nivel maximo, "Convergencia fuerte", envia aviso. Si el Robot 1 veta un token (por ejemplo, porque no se puede vender), queda descartado aunque hable de el medio Telegram.</div>
+  </div>
+</div>
+
+<h3>Un dia normal (14 de octubre)</h3>
+<div class="cifras">
+  <div class="cifra"><div class="k">Robot 1 · detectados</div><div class="v">24.658</div><div class="h">1.202 analizados a fondo, 20 avisos</div></div>
+  <div class="cifra"><div class="k">Robot 2 · mensajes leidos</div><div class="v">7.349</div><div class="h">de 34 canales, 1.654 menciones de tokens</div></div>
+  <div class="cifra"><div class="k">Robot 3 · tokens cruzados</div><div class="v">458</div><div class="h">7.025 evaluados en total, 13 avisos</div></div>
+</div>
+
+<table>
+  <tr><th style="width:17%">Robot</th><th>Donde verlo en el panel</th><th style="width:27%">Que envia</th></tr>
+  <tr><td><b>Robot 1</b></td><td>Paginas <b>Tokens</b> (todo lo detectado, con su ficha) y <b>Alertas</b> (cada aviso enviado)</td><td>Avisos de oportunidad (como mucho 10 al dia) y de peligro</td></tr>
+  <tr><td><b>Robot 2</b></td><td>Pagina <b>Telegram</b>: menciones, mensajes resumidos en espanol, fuentes y canales encontrados</td><td>Nada directamente: alimenta a los otros dos</td></tr>
+  <tr><td><b>Robot 3</b></td><td>Pagina <b>Convergencia</b>: cada token con las dos lecturas y su nivel. La seleccion final es el filtro "Convergencia fuerte"</td><td>Avisos de convergencia fuerte (como mucho 3 al dia)</td></tr>
+  <tr><td><b>Los tres</b></td><td>Portada (<b>Resumen</b>): una tarjeta por robot con su estado y sus cifras del dia. Ficha de cada token: seccion <b>"Telegram y Robot 3"</b></td><td>Todos los avisos llegan por Telegram y por Discord</td></tr>
+</table>
+
+<!-- ======================================================= 1 -->
+<div class="capitulo">
+<h2><span class="num">1.</span>Donde ver cada robot</h2>
+
+<p>Todo esta en el panel, <a href="https://crypto-radar.duckdns.org">https://crypto-radar.duckdns.org</a>, con la misma contrasena de siempre.</p>
+
+<figure>
+  <img src="capturas-guia/01-resumen-robots.jpg" alt="">
+  <figcaption><b>Portada del panel.</b> Arriba del todo, una tarjeta por robot: indicador verde "Funcionando" o rojo "Parado", cuando dio su ultima vuelta y lo que ha hecho hoy. Si una sola parte de un robot se para, su tarjeta se pone en rojo y dice cual. Cada tarjeta lleva a la pagina de ese robot. (Captura tomada poco despues de medianoche, por eso las cifras de hoy aun son pequenas.)</figcaption>
+</figure>
+
+<figure>
+  <img src="capturas-guia/02-tokens.jpg" alt="">
+  <figcaption><b>Robot 1, pagina Tokens.</b> Todo lo detectado con su nota de oportunidad y de riesgo, su liquidez y su capitalizacion; aqui, filtrado por los tokens de los que ya ha avisado. Se filtra por cadena, estado y notas, y pinchando en cualquier token se abre su ficha con el analisis completo.</figcaption>
+</figure>
+</div>
+
+<figure>
+  <img src="capturas-guia/03-telegram.jpg" alt="">
+  <figcaption><b>Robot 2, pagina Telegram.</b> Arriba, sus cifras: canales que lee, mensajes guardados, ruido filtrado y tokens identificados. Debajo, cuatro pestanas: tokens mencionados (que canal, cuando y si fue antes o despues de que se moviera el precio), mensajes resumidos en espanol, fuentes con su reputacion, y canales que ha encontrado el propio robot.</figcaption>
+</figure>
+
+<figure>
+  <img src="capturas-guia/04-convergencia-como-decide.jpg" alt="">
+  <figcaption><b>Robot 3, pagina Convergencia.</b> Cuantos tokens hay en cada nivel y las reglas con las que decide. Pulsando "Convergencia fuerte" se ve la seleccion final: <a href="https://crypto-radar.duckdns.org/convergencia?nivel=rojo">crypto-radar.duckdns.org/convergencia?nivel=rojo</a></figcaption>
+</figure>
+
+<div class="aviso">
+  <p><b>Desde Telegram, en el bot de avisos.</b> <b>/robots</b> dice si cada robot esta funcionando y sus cifras del dia; <b>/hoy</b>, los tokens de los que te ha avisado hoy, con su enlace; <b>/top</b>, los mejores de las ultimas 24 horas que siguen en juego. El bot solo contesta a las cuentas autorizadas, y la tuya ya lo esta.</p>
+</div>
+
+<!-- ======================================================= 2 -->
+<div class="capitulo">
+<h2><span class="num">2.</span>Que comprueba el Robot 1 en cada token</h2>
+
+<table>
+  <tr><th style="width:24%">Que mira</th><th>Como</th></tr>
+  <tr><td><b>Mercado</b></td><td>Liquidez real, capitalizacion, FDV, volumen a 5 min, 1 h, 6 h y 24 h, numero de compras y ventas y variacion del precio en cada periodo.</td></tr>
+  <tr><td><b>Principales carteras</b></td><td>Top 10 y top 20 <b>descontando el pool, lo quemado y los contratos</b> (si no, la concentracion sale falsa), la mayor cartera individual y el crecimiento de holders por hora.</td></tr>
+  <tr><td><b>Creador</b></td><td>Que parte del suministro conserva, cuantos tokens ha lanzado antes y como acabaron, y quien financio su cartera.</td></tr>
+  <tr><td><b>Seguridad del contrato</b></td><td>Solana: mint y freeze authority, Token-2022 y sus extensiones. Base: permisos del dueno, lista negra, honeypot, comisiones de compra y venta y si se pueden cambiar, contrato proxy, contrato verificado. En las dos: liquidez bloqueada, quemada o libre.</td></tr>
+  <tr><td><b>Movimientos sospechosos</b></td><td>Compras de varias carteras en el mismo bloque (bots), wash trading, volumen sin holders nuevos, carteras con saldos identicos, presion vendedora extrema, retirada de liquidez y desplome del precio. Las dos ultimas generan un aviso de peligro inmediato.</td></tr>
+  <tr><td><b>Si se puede comprar y vender</b></td><td>Solana: pide a Jupiter una cotizacion real de comprar y vender 200 dolares al momento y mide cuanto se perderia por el camino y cuanto se puede operar sin mover demasiado el precio. Si Jupiter no encuentra forma de vender, el token queda vetado. Base: Honeypot.is y GoPlus (honeypot y comisiones).</td></tr>
+</table>
+
+<p>Cada dato se contrasta con varias fuentes: la propia blockchain, GoPlus, RugCheck, Jupiter, Honeypot.is, DexScreener y GeckoTerminal. Si una no responde, el sistema anota que dato falto en lugar de inventarlo, y si falta algo critico el token se marca como "no evaluable" y no puede generar aviso. Todo lo que muestra el panel se puede comprobar en la blockchain con los enlaces de cada ficha.</p>
+
+<h2 style="margin-top:16pt"><span class="num">3.</span>Como se calculan las notas</h2>
+
+<p>Son dos notas de 0 a 100, calculadas por separado y que nunca se mezclan. Cada una suma puntos por motivos concretos, y en la ficha de cada token aparece escrito cada motivo con sus puntos. Las que llevan "hasta" suman mas cuanto mas fuerte es la senal.</p>
+<ul>
+  <li><b>Oportunidad:</b> los puntos a favor se suman y se expresan sobre el maximo posible, que son 189. Un 100 seria un token que lo cumple todo. HIGGS, el ejemplo del punto 5, sumo 141 de 189: un 75.</li>
+  <li><b>Riesgo:</b> los puntos en contra se suman tal cual, con un maximo de 100. Un riesgo de 75 o mas veta el token, y a partir de 50 empieza a rebajar la nota de oportunidad.</li>
+</ul>
+
+<div class="juntos">
+<h3>Oportunidad (mas es mejor)</h3>
+<table>
+  <tr><th>Motivo</th><th class="n">Puntos</th></tr>
+  <tr><td>Punto de partida: token nuevo detectado y analizado</td><td class="n">25</td></tr>
+  <tr><td>Seguridad limpia: sin mint, sin freeze y sin permisos peligrosos</td><td class="n">+20</td></tr>
+  <tr><td>Los holders crecen deprisa (de 20 a 120 nuevos por hora)</td><td class="n">hasta +18</td></tr>
+  <tr><td>Hay mas compras que ventas (de 1,2 a 2,5 veces)</td><td class="n">hasta +15</td></tr>
+  <tr><td>El creador ya lanzo antes algun token que funciono</td><td class="n">+15</td></tr>
+  <tr><td>Liquidez bloqueada o quemada</td><td class="n">+12</td></tr>
+  <tr><td>El volumen se acelera (la ultima hora es el 15 % o mas del dia)</td><td class="n">+12</td></tr>
+  <tr><td>Suministro bien repartido (top 10 real del 25 % o menos)</td><td class="n">+12</td></tr>
+  <tr><td>Sube bastante mas que el mercado general (10 % o mas por encima)</td><td class="n">+12</td></tr>
+  <tr><td>Liquidez suficiente para operar (de 15.000 a 60.000 dolares)</td><td class="n">hasta +10</td></tr>
+  <tr><td>El creador no conserva suministro relevante ni tiene historial malo</td><td class="n">+10</td></tr>
+  <tr><td>El precio sube de forma sostenida (+5 % o mas en 1 h)</td><td class="n">+10</td></tr>
+  <tr><td>Sin patrones de bots ni operaciones sospechosas</td><td class="n">+10</td></tr>
+  <tr><td>Publica web y redes sociales</td><td class="n">+8</td></tr>
+</table>
+<p style="font-size:9pt;color:#57606a">Con el mercado general flojo la oportunidad baja un 10 % y el riesgo sube 10 puntos; con el mercado muy fuerte baja un 8 %, para no confundir la subida de todo el mercado con meritos del token.</p>
+</div>
+</div>
+
+<div>
+<h3>Riesgo (mas es peor)</h3>
+<table>
+  <thead><tr><th>Motivo</th><th class="n">Puntos</th></tr></thead>
+  <tr><td>Honeypot: se puede comprar pero no vender <span class="pill p-rojo">veto</span></td><td class="n">+60</td></tr>
+  <tr><td>Se ha retirado liquidez del pool <span class="pill p-rojo">veto</span></td><td class="n">+45</td></tr>
+  <tr><td>El creador ya lanzo tokens que acabaron mal</td><td class="n">+35</td></tr>
+  <tr><td>Mint authority activa: pueden crear mas tokens <span class="pill p-rojo">veto</span></td><td class="n">+30</td></tr>
+  <tr><td>Lista negra: pueden bloquear tu direccion <span class="pill p-rojo">veto</span></td><td class="n">+30</td></tr>
+  <tr><td>Freeze authority activa: pueden congelar tus tokens <span class="pill p-rojo">veto</span></td><td class="n">+25</td></tr>
+  <tr><td>Liquidez sin bloquear ni quemar (parcialmente bloqueada: +10)</td><td class="n">+25</td></tr>
+  <tr><td>El dueno puede cambiar comisiones o permisos</td><td class="n">+25</td></tr>
+  <tr><td>Wash trading: operaciones repetidas para inflar el volumen</td><td class="n">hasta +25</td></tr>
+  <tr><td>Las 10 mayores carteras concentran demasiado (del 45 % al 80 %)</td><td class="n">hasta +25</td></tr>
+  <tr><td>Comisiones altas (10 % o mas) o modificables</td><td class="n">+20</td></tr>
+  <tr><td>Una sola cartera con mas del 15 %</td><td class="n">hasta +20</td></tr>
+  <tr><td>El creador conserva mas del 5 %</td><td class="n">hasta +20</td></tr>
+  <tr><td>Liquidez muy baja (menos de 8.000 dolares)</td><td class="n">hasta +20</td></tr>
+  <tr><td>Varias carteras compraron en el mismo bloque (bots)</td><td class="n">hasta +20</td></tr>
+  <tr><td>Mucho volumen sin holders nuevos</td><td class="n">hasta +20</td></tr>
+  <tr><td>Contrato proxy: el codigo se puede sustituir</td><td class="n">+15</td></tr>
+  <tr><td>El creador lanza tokens en serie (4 o mas)</td><td class="n">+15</td></tr>
+  <tr><td>Mucha mas venta que compra en la ultima hora (2 a 1)</td><td class="n">hasta +15</td></tr>
+  <tr><td>Token-2022 con extensiones</td><td class="n">+12</td></tr>
+  <tr><td>Contrato sin verificar</td><td class="n">+10</td></tr>
+  <tr><td>Sin web ni redes sociales</td><td class="n">+5</td></tr>
+</table>
+</div>
+
+<div class="aviso">
+  <p><b>Vetos.</b> Honeypot, lista negra, mint o freeze activas, liquidez retirada, no hay ruta de venta en Jupiter, el impacto en el precio hace imposible operar, o el riesgo total llega a 75. Un token vetado no genera ningun aviso, ni del Robot 1 ni del Robot 3.</p>
+  <p><b>Cuando avisa el Robot 1:</b> oportunidad de 55 o mas, riesgo de 60 o menos y sin veto, con un maximo de 10 avisos de oportunidad al dia repartidos a lo largo de la jornada.</p>
+  <p>Todos los pesos y umbrales estan en ficheros de configuracion y se ajustan sin tocar codigo.</p>
+</div>
+
+<!-- ======================================================= 4 -->
+<div class="capitulo">
+<h2><span class="num">4.</span>Como decide el Robot 3</h2>
+
+<p>Para cada token mencionado en Telegram, el Robot 3 coge la lectura del Robot 1 (oportunidad, riesgo, vetos) y la del Robot 2 (cuantos canales hablan de el, si se copian entre si, su reputacion, si hablaron antes o despues de que se moviera el precio y que dicen exactamente), y le asigna un nivel:</p>
+
+<table>
+  <tr><th style="width:22%">Nivel</th><th>Condiciones</th><th style="width:16%">Avisa</th></tr>
+  <tr>
+    <td><span class="pill p-rojo">Convergencia fuerte</span></td>
+    <td>Todas a la vez:
+      <ul style="margin:3pt 0 0">
+        <li>Robot 1: oportunidad de 55 o mas, riesgo de 40 o menos y ningun veto.</li>
+        <li>Robot 2: al menos 2 canales independientes (que no se copian entre si) con reputacion media de 50 o mas.</li>
+        <li>La informacion aparecio en Telegram antes de que el precio se moviera.</li>
+        <li>La blockchain no desmiente nada de lo que dicen los mensajes (por ejemplo, si un canal dice que la liquidez esta bloqueada y no lo esta, el token ya no puede llegar a este nivel).</li>
+      </ul>
+    </td>
+    <td>Si, por Telegram y Discord. Maximo 3 al dia</td>
+  </tr>
+  <tr><td><span class="pill p-naranja">Convergencia</span></td><td>Oportunidad de 45 o mas, riesgo de 60 o menos y al menos una fuente independiente. Interes alto, con reservas.</td><td>No</td></tr>
+  <tr><td><span class="pill p-azul">Seguimiento</span></td><td>Se habla del token en Telegram pero los datos del Robot 1 no lo respaldan lo suficiente.</td><td>No</td></tr>
+  <tr><td><span class="pill p-gris">Descartado</span></td><td>El Robot 1 lo veto o no se pudo comprobar lo suficiente. El veto gana siempre, hablen de el los canales que hablen.</td><td>No</td></tr>
+</table>
+
+<p>La reputacion de cada canal no la pone nadie a mano: sale de su historial real, de cuantas veces dio un token antes que nadie y con cuanta antelacion respecto al movimiento del precio. Y dos canales que publican lo mismo cambiando emojis y enlaces cuentan como una sola fuente.</p>
+
+<p>Hasta hoy el Robot 3 ha evaluado <b>7.025 tokens</b>: 13 en convergencia fuerte (todos con aviso), 155 en convergencia, 1.105 en seguimiento y 5.752 descartados.</p>
+</div>
+
+<!-- ======================================================= 5 -->
+<div class="capitulo">
+<h2><span class="num">5.</span>Ejemplo real: HIGGS, 4 de octubre</h2>
+
+<p>Un token de principio a fin, con los datos de cada robot que justifican la decision final. Su ficha esta en el panel:<br><a href="https://crypto-radar.duckdns.org/token/solana/DoVAVzViX8Bjy3r15nwikSaSbzE6dV4ovd28aWpJpump">crypto-radar.duckdns.org/token/solana/DoVAVzViX8Bjy3r15nwikSaSbzE6dV4ovd28aWpJpump</a></p>
+
+<table>
+  <tr><th style="width:9%">Hora</th><th style="width:13%">Quien</th><th>Que paso</th></tr>
+  <tr><td class="hora">14:26</td><td></td><td>Se crea su pool en PumpSwap (Solana).</td></tr>
+  <tr><td class="hora">14:28</td><td><b>Robot 1</b></td><td>Lo detecta, minuto y medio despues. Capitalizacion 24.600 dolares, liquidez 8.500.</td></tr>
+  <tr><td class="hora">14:33</td><td><b>Robot 2</b></td><td>Primera mencion en Telegram, en el canal Pumpfun Ultimate Alert.</td></tr>
+  <tr><td class="hora">14:36</td><td><b>Robot 2</b></td><td>Segundo canal: pumpdotfunalert.</td></tr>
+  <tr><td class="hora">14:38</td><td><b>Robot 2</b></td><td>Tercer canal: KOLscope. Tres canales que no se copian entre si.</td></tr>
+  <tr><td class="hora">14:43</td><td><b>Robot 1</b></td><td>Termina el analisis a fondo: <b>oportunidad 75 (FUERTE), riesgo 27</b>. Detalle en la tabla siguiente.</td></tr>
+  <tr><td class="hora">14:45</td><td><b>Robot 3</b></td><td>Primer veredicto: Convergencia.</td></tr>
+  <tr><td class="hora">14:46</td><td><b>Robot 3</b></td><td>Lo sube a <b>Convergencia fuerte</b> y sale el aviso por Telegram y por Discord.</td></tr>
+  <tr><td class="hora">15:20</td><td><b>Robot 1</b></td><td>Aviso de peligro: el precio cae un 36 % en 5 minutos. Desde esa hora detecta tambien wash trading (volumen de 24 h de 48 veces la liquidez).</td></tr>
+</table>
+
+<div>
+<h3>Lo que encontro el Robot 1 (14:43)</h3>
+<table>
+  <tr><th style="width:30%">A favor</th><th>Dato</th><th class="n">Puntos</th></tr>
+  <tr><td>Seguridad limpia</td><td>Mint y freeze authority revocadas</td><td class="n">+20</td></tr>
+  <tr><td>Liquidez asegurada</td><td>Bloqueada o quemada al 100 %</td><td class="n">+12</td></tr>
+  <tr><td>Reparto</td><td>1.608 holders reales; top 10 con el 15,4 %, la mayor cartera con el 3,1 %</td><td class="n">+12</td></tr>
+  <tr><td>Creador</td><td>Conserva el 0 % del suministro</td><td class="n">+10</td></tr>
+  <tr><td>Interes creciente</td><td>La ultima hora concentra todo el volumen del dia; precio +794 % en 1 h, muy por encima del mercado</td><td class="n">+12 +12 +10</td></tr>
+  <tr><td>Liquidez</td><td>62.000 dolares</td><td class="n">+10</td></tr>
+  <tr><td>Sin actividad sospechosa · web y redes</td><td>Ningun patron de bots en ese momento · web y X publicadas</td><td class="n">+10 +8</td></tr>
+  <tr><td colspan="2"><b>Oportunidad:</b> 25 de partida + 116 a favor = 141 de 189 posibles</td><td class="n"><b>75</b></td></tr>
+  <tr><th>En contra</th><th>Dato</th><th class="n">Riesgo</th></tr>
+  <tr><td>Creador en serie</td><td>Habia lanzado 25 tokens antes (patron de fabrica de tokens)</td><td class="n">+15</td></tr>
+  <tr><td>Token-2022 con extensiones</td><td>Puede llevar comisiones de transferencia o delegado permanente</td><td class="n">+12</td></tr>
+  <tr><td colspan="2"><b>Riesgo:</b> 15 + 12</td><td class="n"><b>27</b></td></tr>
+  <tr><th>Compra y venta</th><td colspan="2">Cotizacion real de Jupiter: comprar y vender 200 dolares al momento costaba un 3,2 % (se recuperaba el 96,8 %). Fuentes consultadas: blockchain, RugCheck, GoPlus y Jupiter.</td></tr>
+</table>
+</div>
+</div>
+
+<figure>
+  <img src="capturas-guia/06-higgs-cabecera.jpg" alt="">
+  <figcaption><b>Cabecera de la ficha de HIGGS hoy.</b> Precio, liquidez y capitalizacion actuales con sus maximos, enlaces para comprobarlo todo (DexScreener, explorador, web y X) y el coste real de operar medido con Jupiter. La nota que se ve es la de hoy, que ha cambiado desde el aviso; la del momento del aviso (75 y 27) queda guardada en su tarjeta de Convergencia. Debajo, en el panel, cada punto de la nota aparece con su motivo.</figcaption>
+</figure>
+
+<figure>
+  <img src="capturas-guia/10-higgs-seguridad-holders.jpg" alt="">
+  <figcaption><b>Seguridad y holders de HIGGS.</b> Cada direccion de la lista se puede abrir en el explorador de la blockchain para comprobarla.</figcaption>
+</figure>
+
+<figure>
+  <img src="capturas-guia/07-higgs-telegram-robot3.jpg" alt="">
+  <figcaption><b>Lo que leyo el Robot 2.</b> Las primeras 5 de sus 13 menciones, en orden de llegada, con el canal y la anticipacion respecto al movimiento del precio. Las tres primeras, de tres canales distintos, son las que cuentan como fuentes independientes. En el panel se ven todas; los mensajes que la IA ha clasificado salen resumidos en espanol y el resto en su idioma original.</figcaption>
+</figure>
+
+<div class="juntos">
+<h3>La decision del Robot 3 (14:46)</h3>
+<table>
+  <tr><th>Condicion para Convergencia fuerte</th><th class="n">Pide</th><th class="n">HIGGS</th><th class="n"></th></tr>
+  <tr><td>Oportunidad (Robot 1)</td><td class="n">55 o mas</td><td class="n">75</td><td class="n">cumple</td></tr>
+  <tr><td>Riesgo (Robot 1)</td><td class="n">40 o menos</td><td class="n">27</td><td class="n">cumple</td></tr>
+  <tr><td>Vetos (Robot 1)</td><td class="n">ninguno</td><td class="n">ninguno</td><td class="n">cumple</td></tr>
+  <tr><td>Canales independientes (Robot 2)</td><td class="n">2 o mas</td><td class="n">3</td><td class="n">cumple</td></tr>
+  <tr><td>Reputacion media de esos canales (Robot 2)</td><td class="n">50 o mas</td><td class="n">51</td><td class="n">cumple</td></tr>
+  <tr><td>Informacion antes del movimiento del precio</td><td class="n">si</td><td class="n">9 min antes</td><td class="n">cumple</td></tr>
+  <tr><td>Contradicciones entre mensajes y blockchain</td><td class="n">ninguna</td><td class="n">ninguna</td><td class="n">cumple</td></tr>
+</table>
+</div>
+
+<figure class="media">
+  <img src="capturas-guia/05-convergencia-higgs.jpg" alt="">
+  <figcaption><b>Tarjeta de HIGGS en la pagina Convergencia.</b> Las dos lecturas una al lado de la otra, el camino de niveles (Convergencia y luego Convergencia fuerte) y como va el precio hoy comparado con el del primer veredicto.</figcaption>
+</figure>
+
+<div class="juntos">
+<h3>Lo que paso despues</h3>
+<p>Medido desde el precio del momento del aviso: en las 24 horas siguientes llego a <b>8,4 veces</b> ese precio, su punto mas bajo fue la mitad (0,52 veces), y a las 24 horas estaba al <b>doble</b>.</p>
+<figure>
+  <img src="capturas-guia/08-higgs-evolucion.jpg" alt="">
+  <figcaption><b>Evolucion en las primeras 72 horas desde la deteccion.</b> Pasando el raton por el grafico en el panel se ve el valor exacto de cada momento, y con el icono de tabla se ven los numeros.</figcaption>
+</figure>
+</div>
+
+<div class="aviso ambar">
+  <p><b>Dos precisiones para que el ejemplo sea exacto.</b></p>
+  <ul>
+    <li>Cuando salio el aviso, el precio ya habia subido unas 40 veces desde el lanzamiento: estos tokens se mueven muchisimo en los primeros minutos. La tabla "Que paso despues" de la ficha mide desde la deteccion (14:28) y por eso da cifras mucho mayores (hasta 143 veces); lo que de verdad se podia aprovechar es lo que se mide desde el aviso, que es lo de arriba.</li>
+    <li>Las tres fuentes de Telegram eran canales automaticos de alertas y de "calls". El Robot 3 no se fia de lo que dicen, sino de cuando lo dicen y del historial real de cada canal.</li>
+  </ul>
+</div>
+
+<!-- ======================================================= 6 -->
+<div>
+<h2 style="margin-top:20pt"><span class="num">6.</span>Se ha probado con datos historicos?</h2>
+
+<p>Si, y conviene explicar exactamente como. Desde el 20 de agosto el sistema pone la nota en el momento de detectar cada token, sin saber lo que va a pasar, y mide el resultado despues. Es una prueba con datos reales en la que no hay trampa posible: la nota no se puede ajustar mirando el resultado. Ya hay <b>28.817 tokens con el resultado cerrado</b>.</p>
+
+<p>Lo que todavia no existe es una <b>simulacion de operaciones</b>: cuando entrar, cuando salir y con que comisiones.</p>
+
+<h3>El Robot 1 separa bien lo malo</h3>
+<figure>
+  <img src="capturas-guia/11-resultados-nota.jpg" alt="">
+  <figcaption><b>Resultado segun la nota que el Robot 1 dio al detectar cada token.</b> "Exito" es que llego a multiplicar por 2 su capitalizacion; "rug" es que le retiraron casi toda la liquidez. Con nota menor de 50 acabo en rug el 53 %; con nota de 50 a 64, el 18 %. Y la mitad de los de 50 a 64 llego a doblar, frente al 18 % de los de menos de 50.</figcaption>
+</figure>
+
+<div class="juntos">
+<h3>Avisos del Robot 1: 529 desde el 20 de agosto</h3>
+<p>Medidos desde el precio del momento del aviso, en las 24 horas siguientes:</p>
+<div class="cifras">
+  <div class="cifra"><div class="k">Llegaron a doblar</div><div class="v">20 %</div><div class="h">1 de cada 5</div></div>
+  <div class="cifra"><div class="k">Subieron al menos un 50 %</div><div class="v">37 %</div><div class="h">en algun momento</div></div>
+  <div class="cifra"><div class="k">Cayeron a la mitad</div><div class="v">65 %</div><div class="h">en algun momento</div></div>
+</div>
+<p>Y pasadas las 24 horas, solo el 37 % seguia por encima del precio del aviso.</p>
+</div>
+
+<div class="juntos">
+<h3>Avisos del Robot 3: 13 en total</h3>
+<p>Los 3 de septiembre (ELON, TRENDS y DIABLO) no se pueden medir, porque los precios de esos dias se perdieron con el cambio de servidor. Los 10 desde el 2 de octubre, medidos desde el precio del aviso:</p>
+<table>
+  <tr><th>Token</th><th>Aviso</th><th class="n">Maximo en 24 h</th><th class="n">Minimo en 24 h</th><th class="n">A las 24 h</th></tr>
+  <tr><td><b>HIGGS</b></td><td>4 oct, 14:46</td><td class="n">8,4x</td><td class="n">0,52x</td><td class="n">2,03x</td></tr>
+  <tr><td><b>HOTBOT</b></td><td>2 oct, 07:56</td><td class="n">7,5x</td><td class="n">0,77x</td><td class="n">3,75x</td></tr>
+  <tr><td><b>SOLBORN</b></td><td>5 oct, 17:31</td><td class="n">7,1x</td><td class="n">0,68x</td><td class="n">0,20x</td></tr>
+  <tr><td><b>POOPYBOT</b></td><td>3 oct, 00:03</td><td class="n">4,4x</td><td class="n">0,12x</td><td class="n">—</td></tr>
+  <tr><td><b>SS</b></td><td>2 oct, 08:36</td><td class="n">1,50x</td><td class="n">0,01x</td><td class="n">—</td></tr>
+  <tr><td><b>memeyin</b></td><td>3 oct, 00:46</td><td class="n">1,43x</td><td class="n">0,01x</td><td class="n">—</td></tr>
+  <tr><td><b>Giko</b> *</td><td>2 oct, 07:48</td><td class="n">1,13x</td><td class="n">0,19x</td><td class="n">—</td></tr>
+  <tr><td><b>PRESSURE</b></td><td>3 oct, 03:10</td><td class="n">1,00x</td><td class="n">0,15x</td><td class="n">0,03x</td></tr>
+  <tr><td><b>HODL</b></td><td>5 oct, 20:52</td><td class="n">0,78x</td><td class="n">0,23x</td><td class="n">0,02x</td></tr>
+  <tr><td><b>BB</b> *</td><td>12 oct, 09:45</td><td class="n">0,78x</td><td class="n">0,46x</td><td class="n">—</td></tr>
+</table>
+<p style="font-size:8.8pt;color:#57606a">1,00x es el precio del aviso. "—": a las 24 horas el seguimiento ya se habia cerrado porque el token se habia hundido o se habia quedado sin liquidez. *: muy pocas mediciones despues del aviso, cifra aproximada.</p>
+<p>Resumen: 4 llegaron a multiplicar su precio entre 4 y 8 veces, 3 subieron entre un 13 % y un 50 %, y 3 no subieron. Y 7 de los 10 cayeron mas de la mitad en algun momento de esas 24 horas. Son todavia pocos casos para sacar conclusiones firmes.</p>
+</div>
+
+<figure class="estrecha">
+  <img src="capturas-guia/12-resultados-robot3.jpg" alt="">
+  <figcaption><b>Pagina Resultados, seccion del Robot 3.</b> Que hizo el precio en las 24 horas siguientes a que un token llegara a cada nivel. Aqui cuenta cada vez que un token llego al nivel, aunque no se avisara (por eso salen 32 en convergencia fuerte frente a 13 avisos: el tope de 3 avisos al dia dejo fuera los demas). A la derecha, los tokens de los que se hablo en Telegram contra los que no: acaban en rug bastante menos (37 % frente a 55 %).</figcaption>
+</figure>
+
+<div class="aviso verde">
+  <p><b>La conclusion honesta.</b> El sistema encuentra tokens que se mueven y aparta muy bien los que acaban en estafa. Pero en este tipo de tokens la subida es rapida y la caida tambien, asi que la ganancia depende de vender a tiempo. El siguiente paso logico seria simular reglas de salida (por ejemplo, vender al doble o cortar perdidas a cierto punto) sobre todos los avisos ya enviados, para saber con datos reales que estrategia habria funcionado.</p>
+</div>
+</div>
+
+<!-- ======================================================= 7 -->
+<div class="capitulo">
+<h2><span class="num">7.</span>Que esta hecho y que falta</h2>
+
+<p>Punto por punto, frente a lo que se pidio para cada robot. Lo que falta es lo mismo que figuraba en el documento de alcance de la entrega.</p>
+
+<table>
+  <thead><tr><th>Robot 1 · lo pedido</th><th style="width:16%">Estado</th></tr></thead>
+  <tr><td>Deteccion de tokens recien creados, microcaps y lanzadores (Pump.fun y otros), en Solana y Base</td><td><span class="pill p-ok">Hecho</span></td></tr>
+  <tr><td>Preventas y airdrops. El sistema ve los tokens en cuanto tienen pool de compraventa, y una preventa todavia no lo tiene</td><td><span class="pill p-no">No incluido</span></td></tr>
+  <tr><td>Capitalizacion, liquidez, volumen y operaciones</td><td><span class="pill p-ok">Hecho</span></td></tr>
+  <tr><td>Crecimiento de holders y compradores</td><td><span class="pill p-ok">Hecho</span></td></tr>
+  <tr><td>Concentracion de las principales carteras</td><td><span class="pill p-ok">Hecho</span></td></tr>
+  <tr><td>Cartera del creador</td><td><span class="pill p-ok">Hecho</span></td></tr>
+  <tr><td>Insiders: se detectan los patrones (compras en el mismo bloque, saldos identicos, quien financio al creador), pero no el rastreo del dinero varios saltos hacia atras</td><td><span class="pill p-parcial">Parcial</span></td></tr>
+  <tr><td>Movimientos sospechosos, bots y manipulacion</td><td><span class="pill p-ok">Hecho</span></td></tr>
+  <tr><td>Seguridad del contrato, mint y freeze authority, permisos</td><td><span class="pill p-ok">Hecho</span></td></tr>
+  <tr><td>Liquidez anadida o retirada, con aviso de peligro</td><td><span class="pill p-ok">Hecho</span></td></tr>
+  <tr><td>Actividad en Telegram</td><td><span class="pill p-ok">Hecho (Robot 2)</span></td></tr>
+  <tr><td>Actividad en X (Twitter) y Discord. X ya no da acceso gratuito a su API</td><td><span class="pill p-no">No incluido</span></td></tr>
+  <tr><td>Clasificacion por narrativa (IA, DeFi, gaming, memecoin...)</td><td><span class="pill p-no">No incluido</span></td></tr>
+  <tr><td>Carteras que historicamente entran pronto en proyectos que funcionan: los datos ya se guardan (389.000 movimientos de 151.000 carteras), falta la parte que los analiza</td><td><span class="pill p-parcial">Parcial</span></td></tr>
+  <tr><td>Nota de oportunidad y de riesgo con los motivos explicados</td><td><span class="pill p-ok">Hecho</span></td></tr>
+  <tr><td>Panel web y avisos por Telegram (ademas, por Discord)</td><td><span class="pill p-ok">Hecho</span></td></tr>
+  <tr><td>Validacion con datos reales: medicion de resultados desde el 20 de agosto. Falta la simulacion de operaciones (punto 6)</td><td><span class="pill p-parcial">Parcial</span></td></tr>
+  <tr><td>Codigo fuente, documentacion de las APIs y verificacion de los datos en la blockchain</td><td><span class="pill p-ok">Hecho</span></td></tr>
+</table>
+
+<table>
+  <thead><tr><th>Robot 2 · lo pedido</th><th style="width:16%">Estado</th></tr></thead>
+  <tr><td>Buscar en Telegram en espanol, portugues e ingles. Busca en los tres idiomas, aunque hoy casi todos los canales que aportan tokens publican en ingles</td><td><span class="pill p-ok">Hecho</span></td></tr>
+  <tr><td>Analizar conversaciones y canales, y encontrar canales nuevos por su cuenta</td><td><span class="pill p-ok">Hecho</span></td></tr>
+  <tr><td>Separar las senales utiles del ruido, el spam y la informacion poco fiable</td><td><span class="pill p-ok">Hecho</span></td></tr>
+  <tr><td>Identificar las fuentes de interes (reputacion medida con resultados reales)</td><td><span class="pill p-ok">Hecho</span></td></tr>
+  <tr><td>Entregar la informacion en espanol. Los resumenes los hace una IA con plan gratuito que da para unos 250 mensajes al dia; los demas se filtran y se sacan sus tokens igualmente, pero sin resumen. Resumirlos todos requiere un plan de pago de ese servicio</td><td><span class="pill p-parcial">Parcial</span></td></tr>
+</table>
+
+<table>
+  <tr><th>Robot 3 e integracion · lo pedido</th><th style="width:16%">Estado</th></tr>
+  <tr><td>Recibir lo del Robot 2 y cruzarlo con el analisis del Robot 1</td><td><span class="pill p-ok">Hecho</span></td></tr>
+  <tr><td>Verificar la coherencia entre las dos fuentes</td><td><span class="pill p-ok">Hecho</span></td></tr>
+  <tr><td>Determinar que oportunidades merecen atencion y seguimiento (niveles y aviso)</td><td><span class="pill p-ok">Hecho</span></td></tr>
+  <tr><td>Los tres funcionando como un solo sistema: misma base de datos y mismo panel, y el Robot 2 pasa cada token al Robot 1 para que lo analice</td><td><span class="pill p-ok">Hecho</span></td></tr>
+</table>
+
+<div class="aviso">
+  <p>Si te viene bien, lo vemos juntos en una videollamada corta con el panel abierto y te enseno cada paso en directo.</p>
+</div>
+</div>
+
+</body>
+</html>
