@@ -13,7 +13,7 @@ import { SkeletonText } from '../components/ui/Skeleton';
 import { BarList } from '../components/charts/BarList';
 import { TokenCell, rutaToken } from '../components/domain/TokenCell';
 import { ChainBadge, LevelBadge, OutcomeBadge } from '../components/domain/Badges';
-import { fmtMultiple, fmtNum, fmtPct } from '../lib/format';
+import { fmtMultiple, fmtNum, fmtPct, fmtSegundos } from '../lib/format';
 import { RESULTADOS } from '../lib/labels';
 
 const pct = (a: number, b: number) => (b > 0 ? `${Math.round((a / b) * 100)}%` : '–');
@@ -111,9 +111,9 @@ export default function Resultados() {
           <Callout tone="info">Todavia no hay alertas con latencia medida. El dato aparece con la primera.</Callout>
         ) : (
           <div className="grid grid--stats">
-            <StatTile loading={!d} icon={<Timer />} label="Latencia mediana" value={`${d?.latencia?.mediana ?? '–'} s`} hint="de la creacion del par a la alerta" />
-            <StatTile loading={!d} icon={<Hourglass />} label="Percentil 90" value={`${d?.latencia?.p90 ?? '–'} s`} hint="9 de cada 10 alertas, por debajo" />
-            <StatTile loading={!d} icon={<Workflow />} label="Analisis completo" value={`${d?.latencia?.analisis ?? '–'} s`} hint="mediana" />
+            <StatTile loading={!d} icon={<Timer />} label="Latencia mediana" value={fmtSegundos(d?.latencia?.mediana)} hint="de la creacion del par a la alerta" />
+            <StatTile loading={!d} icon={<Hourglass />} label="Percentil 90" value={fmtSegundos(d?.latencia?.p90)} hint="9 de cada 10 alertas, por debajo" />
+            <StatTile loading={!d} icon={<Workflow />} label="Analisis completo" value={fmtSegundos(d?.latencia?.analisis)} hint="mediana" />
             <StatTile loading={!d} icon={<Gauge />} label="Muestras" value={fmtNum(d?.latencia?.muestras)} hint="alertas medidas" />
           </div>
         )}
@@ -182,7 +182,7 @@ export default function Resultados() {
         </div>
       </Section>
 
-      <Section title="Los que mas subieron" sub="Los 20 tokens cerrados con mayor subida desde la deteccion, sin los que se detectaron con un valor de practicamente cero.">
+      <Section title="Los que mas subieron" sub="Los 20 tokens cerrados que mas subieron sin acabar en rug. Se dejan fuera los picos imposibles (mas de 1.000x), que salen de precios rotos.">
         <Card flush>
           <DataTable
             columns={[

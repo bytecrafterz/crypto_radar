@@ -86,6 +86,17 @@ export function fmtDuration(ms: number | null | undefined): string {
   return h < 48 ? `${h} h` : `${Math.round(h / 24)} dias`;
 }
 
+/** Segundos en la unidad que se lee de un vistazo: 45 s, 12 min, 2 h 5 min. */
+export function fmtSegundos(s: number | null | undefined): string {
+  if (!valido(s)) return ND;
+  if (s < 90) return `${Math.round(s)} s`;
+  const min = Math.round(s / 60);
+  if (min < 90) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const resto = min % 60;
+  return resto ? `${h} h ${resto} min` : `${h} h`;
+}
+
 export function shortAddr(a: string | null | undefined, head = 6, tail = 4): string {
   if (!a) return ND;
   return a.length <= head + tail + 3 ? a : `${a.slice(0, head)}…${a.slice(-tail)}`;

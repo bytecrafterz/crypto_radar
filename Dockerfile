@@ -10,6 +10,8 @@ RUN npm ci
 
 COPY tsconfig.json ./
 COPY src ./src
+# El panel (React) se compila a dist/panel junto con el servidor.
+COPY web ./web
 RUN npm run build
 
 # ---------------------------------------------------------------------------

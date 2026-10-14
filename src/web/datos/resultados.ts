@@ -35,9 +35,12 @@ export async function datosResultados() {
     query<{ symbol: string | null; chain: string; address: string; peak_multiple: unknown; outcome: string; score_at_detection: unknown }>(
       `SELECT t.symbol, t.chain, t.address, o.peak_multiple, o.outcome, o.score_at_detection
          FROM token_outcomes o JOIN tokens t ON t.id = o.token_id
-        -- Fuera los que se detectaron sin valor real: su "subida" es una
-        -- division por casi cero, no algo que hubiera podido aprovecharse.
-        WHERE o.peak_multiple < 99999999 AND COALESCE(o.entry_market_cap, 0) >= 1000
+        -- Fuera los picos imposibles. Mas de 1.000x en dias no se ha visto en
+        -- un token real: sale de un precio roto (un pool manipulado casi sin
+        -- liquidez o una deteccion con valor de casi cero), y casi todos
+        -- acaban en rug. Lo que se ensena es lo que de verdad pudo aprovecharse.
+        WHERE o.outcome <> 'rug' AND o.peak_multiple <= 1000
+          AND COALESCE(o.entry_market_cap, 0) >= 1000
         ORDER BY o.peak_multiple DESC NULLS LAST LIMIT 20`,
     ),
     // Comparacion honesta: los tokens con nota alta contra TODOS los
