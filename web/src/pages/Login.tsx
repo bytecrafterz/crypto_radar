@@ -43,7 +43,7 @@ export function Login() {
       <div className="card login__card">
         <div className="login__brand">
           <Logo size={30} />
-          <span>
+          <span style={{ color: 'var(--text)' }}>
             Crypto <span>Radar</span>
           </span>
         </div>

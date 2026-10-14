@@ -11,26 +11,30 @@ export async function datosResumen() {
     repo.recentAlerts(8),
     repo.listTokens({ orderBy: 'oportunidad', limit: 10, minOpportunity: 40 }),
     repo.recentActivity(10),
-    // Ritmo del radar en las ultimas 24 horas: si se para la deteccion, se
-    // ve aqui antes que en ningun otro sitio. Dos recuentos agrupados en vez
-    // de uno por hora: la tabla de tokens tiene cientos de miles de filas.
+    // Ritmo del radar en las ultimas 24 horas COMPLETAS: si se para la
+    // deteccion, se ve aqui antes que en ningun otro sitio. La hora en curso
+    // no entra: acaba de empezar y en el grafico parecia un desplome. Dos
+    // recuentos agrupados en vez de uno por hora: la tabla de tokens tiene
+    // cientos de miles de filas.
     Promise.all([
       query<{ hora: Date; n: number }>(
         `SELECT date_trunc('hour', first_seen) AS hora, COUNT(*)::int AS n FROM tokens
-          WHERE first_seen > date_trunc('hour', now()) - interval '23 hours' GROUP BY 1`,
+          WHERE first_seen >= date_trunc('hour', now()) - interval '24 hours'
+            AND first_seen < date_trunc('hour', now()) GROUP BY 1`,
       ),
       query<{ hora: Date; n: number }>(
         `SELECT date_trunc('hour', enriched_at) AS hora, COUNT(*)::int AS n FROM tokens
-          WHERE enriched_at > date_trunc('hour', now()) - interval '23 hours' GROUP BY 1`,
+          WHERE enriched_at >= date_trunc('hour', now()) - interval '24 hours'
+            AND enriched_at < date_trunc('hour', now()) GROUP BY 1`,
       ),
     ]).then(([det, ana]) => {
-      const inicio = new Date();
-      inicio.setMinutes(0, 0, 0);
+      const actual = new Date();
+      actual.setMinutes(0, 0, 0);
       const clave = (d: Date) => new Date(d).toISOString();
       const mapaDet = new Map(det.map((r) => [clave(r.hora), r.n]));
       const mapaAna = new Map(ana.map((r) => [clave(r.hora), r.n]));
       return Array.from({ length: 24 }, (_, i) => {
-        const hora = new Date(inicio.getTime() - (23 - i) * 3_600_000);
+        const hora = new Date(actual.getTime() - (24 - i) * 3_600_000);
         return { hora, detectados: mapaDet.get(clave(hora)) ?? 0, analizados: mapaAna.get(clave(hora)) ?? 0 };
       });
     }),

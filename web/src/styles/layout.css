@@ -108,7 +108,8 @@
   border-bottom: 1px solid var(--border);
 }
 
-.topbar__menu {
+/* Mas especifico que .btn, que si no lo vuelve a mostrar en escritorio. */
+.topbar .topbar__menu {
   display: none;
 }
 
@@ -251,7 +252,7 @@
     background: var(--overlay);
     z-index: 35;
   }
-  .topbar__menu {
+  .topbar .topbar__menu {
     display: inline-flex;
   }
 }
@@ -278,4 +279,12 @@
   .section {
     margin-top: var(--sp-6);
   }
+}
+
+/* Los controles a la derecha de un titulo (filtros, pestanas) no pueden ser
+   mas anchos que la pantalla: si no caben, se desplazan dentro de su tira. */
+.section__head > .row,
+.page-header__actions {
+  max-width: 100%;
+  min-width: 0;
 }

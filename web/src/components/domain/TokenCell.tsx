@@ -5,7 +5,11 @@ export const rutaToken = (chain: string, address: string) => `/token/${chain}/${
 /** Iniciales del simbolo, para el circulo que hace de icono. */
 export function iniciales(symbol: string | null): string {
   const s = (symbol ?? '?').replace(/[^\p{L}\p{N}]/gu, '');
-  return (s.slice(0, 3) || '?').toUpperCase();
+  // Un caracter chino o japones ocupa lo que dos latinos: con uno basta.
+  // 0x24F es el final del alfabeto latino extendido.
+  const letras = [...s];
+  const largo = letras.some((c) => (c.codePointAt(0) ?? 0) > 0x24f) ? 1 : 3;
+  return (letras.slice(0, largo).join('') || '?').toUpperCase();
 }
 
 interface TokenCellProps {
