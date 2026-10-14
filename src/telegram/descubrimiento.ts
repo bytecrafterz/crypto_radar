@@ -466,14 +466,21 @@ export async function abandonarInutiles(): Promise<number> {
     `SELECT d.id, d.username,
             COALESCE(COUNT(me.id), 0)::int AS menciones
        FROM tg_canales_descubiertos d
-       LEFT JOIN tg_channels c  ON c.username = d.username
+       LEFT JOIN tg_channels c  ON lower(c.username) = lower(d.username)
+       -- SOLO LO DEL ULTIMO MES, POR FECHA DE PUBLICACION
+       -- Antes contaba cualquier mencion de siempre. Al entrar se leen los
+       -- ultimos mensajes del canal, y si alguno nombraba un token, el canal
+       -- ya "aportaba" para siempre aunque llevara meses muerto: New Solana
+       -- Pools no publicaba desde abril y se seguia leyendo.
        LEFT JOIN tg_mentions me ON me.channel_id = c.id
+                               AND me.posted_at > now() - interval '30 days'
       WHERE d.estado = 'unido'
         -- Se le da al menos una semana antes de juzgarlo.
         AND d.unido_at < now() - interval '7 days'
       GROUP BY d.id, d.username
-      -- Ni una sola mencion util en una semana entera.
+      -- Ni una sola mencion en el ultimo mes.
       HAVING COALESCE(COUNT(me.id), 0) = 0
+      ORDER BY d.unido_at
       LIMIT 2`,
   );
 
@@ -482,7 +489,7 @@ export async function abandonarInutiles(): Promise<number> {
     if (await salir(m.username)) {
       await exec(
         `UPDATE tg_canales_descubiertos
-            SET estado = 'abandonado', motivo_estado = 'una semana sin aportar ninguna mencion',
+            SET estado = 'abandonado', motivo_estado = 'un mes sin aportar ninguna mencion',
                 revisado_at = now()
           WHERE id = $1`,
         [m.id],
@@ -490,7 +497,7 @@ export async function abandonarInutiles(): Promise<number> {
       await dejarDeLeer(m.username);
       await exec(
         `INSERT INTO tg_uniones (canal_id, username, accion, resultado, detalle)
-         VALUES ($1, $2, 'salida', 'ok', 'sin aportar nada en una semana')`,
+         VALUES ($1, $2, 'salida', 'ok', 'sin aportar nada en un mes')`,
         [m.id, m.username],
       );
       fuera++;

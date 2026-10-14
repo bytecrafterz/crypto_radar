@@ -4,7 +4,7 @@
  * que es lo que permite hacer backtesting mas adelante.
  */
 import { query, queryOne, exec } from './db.js';
-import { acotarCambio, importeValido, TOPE_PRECIO_USD } from './limites.js';
+import { acotarCambio, importeValido, porcentajeValido, TOPE_PRECIO_USD } from './limites.js';
 import type {
   Chain,
   DiscoveredPair,
@@ -208,7 +208,7 @@ export async function insertSnapshot(
       acotarCambio(pair.priceChangeH6),
       acotarCambio(pair.priceChangeH24),
       extra.holdersCount ?? null,
-      extra.top10Pct ?? null,
+      porcentajeValido(extra.top10Pct ?? null),
       extra.source ?? pair.source,
     ],
   );
@@ -323,10 +323,10 @@ export async function saveHolders(tokenId: number, r: HolderReport): Promise<voi
     [
       tokenId,
       r.holdersCount,
-      r.top10Pct,
-      r.top20Pct,
-      r.largestRealPct,
-      r.deployerPct,
+      porcentajeValido(r.top10Pct),
+      porcentajeValido(r.top20Pct),
+      porcentajeValido(r.largestRealPct),
+      porcentajeValido(r.deployerPct),
       r.partial,
       r.note,
       JSON.stringify(r.holders),

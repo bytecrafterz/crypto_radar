@@ -251,7 +251,21 @@ export async function salir(username: string): Promise<boolean> {
     await cli.invoke(new Api.channels.LeaveChannel({ channel: username }));
     log.info({ canal: username }, 'abandonado el canal');
     return true;
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // YA NO SE ESTABA DENTRO
+    // Si la cuenta ya no es miembro, o el canal cambio de nombre o
+    // desaparecio, Telegram rechaza la salida. Antes eso devolvia "no" sin
+    // decir nada: el canal seguia como unido, se volvia a elegir en cada
+    // vuelta y, como se eligen dos por vuelta, tapaba a todos los demas.
+    // Hasta el 14/10 seguian leyendose 27 canales que no habian aportado ni
+    // una mencion desde septiembre. Lo que se buscaba, no estar dentro, ya
+    // se cumple.
+    if (/USER_NOT_PARTICIPANT|CHANNEL_PRIVATE|CHANNEL_INVALID|USERNAME_INVALID|USERNAME_NOT_OCCUPIED|Cannot find any entity/i.test(msg)) {
+      log.info({ canal: username, motivo: msg.slice(0, 80) }, 'el canal ya no estaba en la cuenta; se da por abandonado');
+      return true;
+    }
+    log.warn({ canal: username, err: msg.slice(0, 160) }, 'no se pudo salir del canal');
     return false;
   }
 }

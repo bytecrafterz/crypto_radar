@@ -18,6 +18,17 @@ export function acotarCambio(v: number | null): number | null {
   return Math.max(-TOPE_CAMBIO_PCT, Math.min(TOPE_CAMBIO_PCT, v));
 }
 
+/**
+ * Un porcentaje del suministro. Mas del 100% es imposible: sale de tokens
+ * con contabilidad rara (los que se reparten comisiones sin emitir
+ * transferencias) y no dice nada. Con 10.000% o mas ni cabia en la columna
+ * numeric(6,2) y se perdia el analisis entero.
+ */
+export function porcentajeValido(v: number | null): number | null {
+  if (v === null || !Number.isFinite(v) || v < 0) return null;
+  return v <= 100 ? v : null;
+}
+
 export function importeValido(v: number | null, tope = TOPE_USD): number | null {
   if (v === null || !Number.isFinite(v)) return null;
   return Math.abs(v) < tope ? v : null;
