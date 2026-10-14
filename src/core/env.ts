@@ -63,6 +63,9 @@ export const env = {
 
   telegramToken: str('TELEGRAM_BOT_TOKEN'),
   telegramChatId: str('TELEGRAM_CHAT_ID'),
+  // Otras cuentas o grupos que pueden usar los comandos del bot, separados
+  // por comas. El chat de los avisos siempre puede.
+  telegramAllowedIds: str('TELEGRAM_ALLOWED_IDS'),
   alertsMuted: bool('ALERTS_MUTED', false),
 
   // Canal alternativo: no necesita telefono, solo una cuenta de Discord.

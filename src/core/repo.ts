@@ -544,6 +544,28 @@ export async function recentAlerts(limit = 50): Promise<
   );
 }
 
+/** Alertas de hoy (dia natural del servidor), las mas recientes primero. */
+export async function listAlertsToday(limit = 15): Promise<
+  Array<{
+    ts: Date;
+    kind: string;
+    opportunity: number | null;
+    risk: number | null;
+    symbol: string | null;
+    chain: string;
+    address: string;
+    pair_address: string | null;
+  }>
+> {
+  return query(
+    `SELECT a.ts, a.kind, a.opportunity, a.risk, t.symbol, t.chain, t.address, t.pair_address
+       FROM alerts a JOIN tokens t ON t.id = a.token_id
+      WHERE a.ts > CURRENT_DATE
+      ORDER BY a.ts DESC LIMIT $1`,
+    [limit],
+  );
+}
+
 // --------------------------------------------------------------------------
 //  Colas de trabajo
 // --------------------------------------------------------------------------
@@ -767,6 +789,14 @@ export interface TokenListFilters {
   maxRisk?: number;
   search?: string;
   onlyAlerted?: boolean;
+  /** Solo los detectados desde ese momento. */
+  since?: Date;
+  /**
+   * Solo los que siguen en juego: fuera los descartados, los archivados y los
+   * que estan en peligro. Sin esto, "las mejores oportunidades" eran tokens
+   * de septiembre ya archivados, con la nota que tuvieron entonces.
+   */
+  active?: boolean;
   limit?: number;
   offset?: number;
   orderBy?: 'reciente' | 'oportunidad' | 'riesgo' | 'liquidez';
@@ -785,6 +815,8 @@ export async function listTokens(f: TokenListFilters = {}): Promise<StoredToken[
   if (f.minOpportunity !== undefined) add('last_opportunity >= ?', f.minOpportunity);
   if (f.maxRisk !== undefined) add('last_risk <= ?', f.maxRisk);
   if (f.onlyAlerted) where.push('alerted_at IS NOT NULL');
+  if (f.since) add('first_seen >= ?', f.since);
+  if (f.active) where.push(`status NOT IN ('descartado', 'archivado', 'peligro')`);
   if (f.search) {
     params.push(`%${f.search}%`);
     where.push(`(symbol ILIKE $${params.length} OR name ILIKE $${params.length} OR address ILIKE $${params.length})`);

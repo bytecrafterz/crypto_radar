@@ -9,7 +9,13 @@ export async function datosResumen() {
   const [stats, alertas, top, actividad, porHora] = await Promise.all([
     repo.getDashboardStats(),
     repo.recentAlerts(8),
-    repo.listTokens({ orderBy: 'oportunidad', limit: 10, minOpportunity: 40 }),
+    repo.listTokens({
+      orderBy: 'oportunidad',
+      limit: 10,
+      minOpportunity: 40,
+      since: new Date(Date.now() - 24 * 3_600_000),
+      active: true,
+    }),
     repo.recentActivity(10),
     // Ritmo del radar en las ultimas 24 horas COMPLETAS: si se para la
     // deteccion, se ve aqui antes que en ningun otro sitio. La hora en curso

@@ -74,7 +74,11 @@ export default function Resumen() {
             />
           </div>
 
-          <Section title="Mejores oportunidades" sub="Los 10 tokens con mejor nota ahora mismo." actions={<Link to="/tokens?orden=oportunidad">Ver todos</Link>}>
+          <Section
+            title="Mejores oportunidades"
+            sub="Los 10 tokens con mejor nota de las ultimas 24 horas que siguen en juego."
+            actions={<Link to="/tokens">Ver todos</Link>}
+          >
             <Card flush>
               <DataTable
                 columns={columnasTop}
@@ -85,7 +89,7 @@ export default function Resumen() {
                 onRetry={() => void q.refetch()}
                 onRowClick={(t) => navegar(rutaToken(t.chain, t.address))}
                 skeletonRows={6}
-                empty={{ title: 'Todavia no hay tokens puntuados', text: 'El sistema necesita unos minutos desde el arranque.' }}
+                empty={{ title: 'Ningun token destacado en las ultimas 24 horas', text: 'Los que pasen de 40 de oportunidad apareceran aqui.' }}
               />
             </Card>
           </Section>

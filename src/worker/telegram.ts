@@ -52,7 +52,45 @@ export async function sendMessage(text: string): Promise<{ ok: boolean; error?: 
 //  Comandos
 // --------------------------------------------------------------------------
 
+/**
+ * ¿Puede este chat usar los comandos? El de los avisos siempre; otros solo
+ * si estan en TELEGRAM_ALLOWED_IDS. Antes el bot contestaba a cualquiera que
+ * diera con el: podia ver las oportunidades y hasta pausar los avisos.
+ */
+export function chatPermitido(chatId: number | string | undefined, chatAvisos: string, otros: string): boolean {
+  if (chatId === undefined) return false;
+  const permitidos = [chatAvisos, ...otros.split(',')].map((s) => s.trim()).filter(Boolean);
+  return permitidos.includes(String(chatId));
+}
+
+const ETIQUETA_ALERTA: Record<string, string> = {
+  oportunidad: '🟢 Oportunidad',
+  convergencia: '🟣 Convergencia',
+  peligro: '🔴 Peligro',
+};
+
+const CADENA: Record<string, string> = { solana: 'Solana', base: 'Base' };
+
+function enlaceDex(chain: string, address: string, pair: string | null): string {
+  return `https://dexscreener.com/${chain}/${pair ?? address}`;
+}
+
+function horaMadrid(d: Date): string {
+  return d.toLocaleTimeString('es-ES', { timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit' });
+}
+
 function registerCommands(b: Bot): void {
+  b.use(async (ctx, next) => {
+    if (chatPermitido(ctx.chat?.id, env.telegramChatId, env.telegramAllowedIds)) return next();
+    log.warn({ chat: ctx.chat?.id, usuario: ctx.from?.username }, 'comando desde un chat sin permiso');
+    if (ctx.chat?.type === 'private') {
+      await ctx.reply(
+        `Este bot es privado. Tu id de Telegram es <code>${ctx.chat.id}</code>: pasaselo al administrador si necesitas acceso.`,
+        { parse_mode: 'HTML' },
+      );
+    }
+  });
+
   b.command('start', async (ctx) => {
     await ctx.reply(
       [
@@ -61,8 +99,9 @@ function registerCommands(b: Bot): void {
         'Te avisare cuando detecte un token que cumpla tus criterios.',
         '',
         'Comandos disponibles:',
+        '/hoy - los tokens que te he enviado hoy',
+        '/top - mejores oportunidades de las ultimas 24 horas',
         '/estado - como va el sistema',
-        '/top - mejores oportunidades de hoy',
         '/ultimas - ultimas alertas enviadas',
         '/filtros - filtros activos ahora mismo',
         '/apis - consumo de las APIs gratuitas',
@@ -79,8 +118,9 @@ function registerCommands(b: Bot): void {
       [
         '<b>Como usar el radar</b>',
         '',
+        '<b>/hoy</b> - los tokens de los que te he avisado hoy, con su enlace.',
+        '<b>/top</b> - los 5 tokens con mejor nota de las ultimas 24 horas que siguen en juego.',
         '<b>/estado</b> - tokens detectados, analizados y vigilados hoy.',
-        '<b>/top</b> - los 5 tokens con mejor puntuacion de oportunidad.',
         '<b>/ultimas</b> - las ultimas alertas que te he enviado.',
         '<b>/filtros</b> - que criterios estoy aplicando ahora.',
         '<b>/apis</b> - cuantas llamadas llevo hoy en cada servicio gratuito.',
@@ -115,23 +155,50 @@ function registerCommands(b: Bot): void {
     );
   });
 
+  b.command('hoy', async (ctx) => {
+    const [stats, alertas] = await Promise.all([repo.getDashboardStats(), repo.listAlertsToday(15)]);
+    const lines = [
+      '<b>Hoy en el radar</b>',
+      `Detectados ${fmtNum(stats.tokensToday)} · analizados ${fmtNum(stats.enrichedToday)} · avisos ${fmtNum(stats.alertsToday)}`,
+      '',
+    ];
+    if (alertas.length === 0) {
+      lines.push('Hoy todavia no te he avisado de ningun token. Con /top ves los mejor puntuados de las ultimas 24 horas.');
+    } else {
+      for (const a of alertas) {
+        const notas = a.kind === 'peligro' ? '' : ` · oportunidad ${a.opportunity ?? 'n/d'}, riesgo ${a.risk ?? 'n/d'}`;
+        lines.push(
+          `${horaMadrid(a.ts)} ${ETIQUETA_ALERTA[a.kind] ?? a.kind}: <b>${escapeHtml(a.symbol ?? '???')}</b> (${CADENA[a.chain] ?? a.chain})${notas}`,
+        );
+        lines.push(`   <a href="${enlaceDex(a.chain, a.address, a.pair_address)}">DexScreener</a> · <code>${escapeHtml(a.address)}</code>`);
+      }
+    }
+    await ctx.reply(lines.join('\n'), { parse_mode: 'HTML', link_preview_options: { is_disabled: true } });
+  });
+
   b.command('top', async (ctx) => {
-    const tokens = await repo.listTokens({ orderBy: 'oportunidad', limit: 5, minOpportunity: 40 });
+    const tokens = await repo.listTokens({
+      orderBy: 'oportunidad',
+      limit: 5,
+      minOpportunity: 40,
+      since: new Date(Date.now() - 24 * 3_600_000),
+      active: true,
+    });
     if (tokens.length === 0) {
-      await ctx.reply('Todavia no hay ningun token con puntuacion destacable.');
+      await ctx.reply('En las ultimas 24 horas no hay ningun token con puntuacion destacable que siga en juego.');
       return;
     }
 
-    const lines = ['<b>Mejores oportunidades</b>', ''];
+    const lines = ['<b>Mejores oportunidades de las ultimas 24 horas</b>', ''];
     for (const t of tokens) {
       lines.push(
-        `<b>${escapeHtml(t.symbol ?? '???')}</b> (${t.chain}) - oportunidad ${t.last_opportunity ?? 0}, riesgo ${t.last_risk ?? 0}`,
+        `<b>${escapeHtml(t.symbol ?? '???')}</b> (${CADENA[t.chain] ?? t.chain}) - oportunidad ${t.last_opportunity ?? 0}, riesgo ${t.last_risk ?? 0}`,
       );
       lines.push(`   Liquidez ${fmtUsd(t.last_liquidity_usd)} | Cap ${fmtUsd(t.last_market_cap_usd)}`);
-      lines.push(`   <code>${escapeHtml(t.address)}</code>`);
+      lines.push(`   <a href="${enlaceDex(t.chain, t.address, t.pair_address)}">DexScreener</a> · <code>${escapeHtml(t.address)}</code>`);
       lines.push('');
     }
-    await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' });
+    await ctx.reply(lines.join('\n'), { parse_mode: 'HTML', link_preview_options: { is_disabled: true } });
   });
 
   b.command('ultimas', async (ctx) => {
@@ -220,8 +287,9 @@ export async function startTelegram(): Promise<void> {
 
   try {
     await bot.api.setMyCommands([
+      { command: 'hoy', description: 'Tokens de hoy' },
+      { command: 'top', description: 'Mejores de las ultimas 24 horas' },
       { command: 'estado', description: 'Como va el sistema' },
-      { command: 'top', description: 'Mejores oportunidades' },
       { command: 'ultimas', description: 'Ultimas alertas' },
       { command: 'filtros', description: 'Filtros activos' },
       { command: 'apis', description: 'Consumo de las APIs' },
