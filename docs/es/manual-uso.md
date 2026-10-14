@@ -124,14 +124,22 @@ Estos avisos son los que evitan que te quedes dentro de un proyecto que se esta 
 
 | Comando | Que hace |
 |---|---|
+| `/robots` | Si cada uno de los 3 robots esta funcionando y lo que ha sacado hoy |
+| `/hoy` | Los tokens de los que te ha avisado hoy, con su enlace a DexScreener |
+| `/top` | Los 5 tokens con mejor puntuacion de las ultimas 24 horas que siguen en juego |
 | `/estado` | Tokens detectados, analizados y vigilados hoy |
-| `/top` | Los 5 tokens con mejor puntuacion |
 | `/ultimas` | Las ultimas alertas enviadas |
 | `/filtros` | Que criterios se estan aplicando ahora |
 | `/apis` | Cuantas llamadas llevas hoy en cada servicio gratuito |
 | `/pausar` | Dejar de recibir alertas (el sistema sigue analizando y guardando) |
 | `/reanudar` | Volver a recibirlas |
 | `/ayuda` | Lista de comandos |
+
+El bot solo contesta en el chat que recibe los avisos. Si escribes desde otra cuenta, te responde con
+tu id de Telegram: pasalo al administrador y te dara acceso.
+
+El mismo estado de los 3 robots esta arriba del todo en la portada del panel (Resumen): una tarjeta por
+robot con un indicador verde "Funcionando" o rojo "Parado", sus cifras de hoy y un enlace a su pagina.
 
 ---
 
