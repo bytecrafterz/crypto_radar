@@ -957,3 +957,91 @@
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
 }
+
+/* ---------- Tarjeta de robot ---------- */
+.robot-card .card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  height: 100%;
+}
+.robot-card {
+  display: flex;
+  flex-direction: column;
+}
+.robot-card > .card__body {
+  flex: 1;
+}
+.robot-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.robot-card__name {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 620;
+}
+.robot-card__func {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.robot-card__alarm {
+  margin: 0;
+  color: var(--critical-ink);
+  font-size: var(--fs-sm);
+  font-weight: 560;
+}
+.robot-card__nums {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3) var(--sp-4);
+  margin: var(--sp-1) 0 0;
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.robot-card__nums > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.robot-card__nums dt {
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+}
+.robot-card__nums dd {
+  margin: 0;
+  font-size: var(--fs-xl);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.robot-card__note {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+.robot-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-top: auto;
+  font-size: var(--fs-sm);
+}
+.robot-card__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.robot-card__link svg {
+  width: 14px;
+  height: 14px;
+}

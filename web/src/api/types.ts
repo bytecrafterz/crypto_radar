@@ -17,10 +17,11 @@ import type {
 } from '../../../src/web/datos/telegram';
 import type { datosConvergenciaResumen, datosVeredictos } from '../../../src/web/datos/convergencia';
 import type { TokenFila } from '../../../src/web/datos/comun';
+import type { ResumenRobot } from '../../../src/worker/robots';
 
 type R<F extends (...args: never[]) => unknown> = Awaited<ReturnType<F>>;
 
-export type { TokenFila };
+export type { TokenFila, ResumenRobot };
 export type Resumen = R<typeof datosResumen>;
 export type ListaTokens = R<typeof datosTokens>;
 export type FichaToken = NonNullable<R<typeof datosToken>>;

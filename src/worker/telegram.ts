@@ -9,6 +9,8 @@ import { getFilters, getScoring } from '../core/config.js';
 import { getState, setState } from '../core/db.js';
 import * as repo from '../core/repo.js';
 import { getUsage } from '../core/http.js';
+import { resumenRobots } from './robots.js';
+import { describirTiempo } from './vigilante.js';
 import { fmtUsd, fmtNum, escapeHtml, shortAddr } from '../core/util.js';
 
 const log = child('telegram');
@@ -99,6 +101,7 @@ function registerCommands(b: Bot): void {
         'Te avisare cuando detecte un token que cumpla tus criterios.',
         '',
         'Comandos disponibles:',
+        '/robots - si cada robot funciona y que ha sacado hoy',
         '/hoy - los tokens que te he enviado hoy',
         '/top - mejores oportunidades de las ultimas 24 horas',
         '/estado - como va el sistema',
@@ -118,6 +121,7 @@ function registerCommands(b: Bot): void {
       [
         '<b>Como usar el radar</b>',
         '',
+        '<b>/robots</b> - estado de los 3 robots y sus cifras de hoy.',
         '<b>/hoy</b> - los tokens de los que te he avisado hoy, con su enlace.',
         '<b>/top</b> - los 5 tokens con mejor nota de las ultimas 24 horas que siguen en juego.',
         '<b>/estado</b> - tokens detectados, analizados y vigilados hoy.',
@@ -153,6 +157,22 @@ function registerCommands(b: Bot): void {
       ].join('\n'),
       { parse_mode: 'HTML' },
     );
+  });
+
+  b.command('robots', async (ctx) => {
+    const robots = await resumenRobots();
+    const icono = { funcionando: '✅', parado: '🛑', arrancando: '⏳' } as const;
+    const texto = { funcionando: 'funcionando', parado: 'PARADO', arrancando: 'arrancando' } as const;
+    const lines = ['<b>Estado de los robots</b>', ''];
+    for (const r of robots) {
+      const vuelta = r.ultimaVueltaMs === null ? '' : ` · ultima vuelta hace ${describirTiempo(r.ultimaVueltaMs)}`;
+      lines.push(`${icono[r.estado]} <b>${escapeHtml(r.nombre)}</b>: ${texto[r.estado]}${vuelta}`);
+      if (r.paradas.length > 0) lines.push(`   Sin dar senales: ${escapeHtml(r.paradas.join(', '))}`);
+      lines.push(`   ${r.cifras.map((c) => `${escapeHtml(c.etiqueta)}: <b>${fmtNum(c.valor)}</b>`).join(' · ')}`);
+      if (r.nota) lines.push(`   <i>${escapeHtml(r.nota)}</i>`);
+      lines.push('');
+    }
+    await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' });
   });
 
   b.command('hoy', async (ctx) => {
@@ -287,6 +307,7 @@ export async function startTelegram(): Promise<void> {
 
   try {
     await bot.api.setMyCommands([
+      { command: 'robots', description: 'Estado de los 3 robots' },
       { command: 'hoy', description: 'Tokens de hoy' },
       { command: 'top', description: 'Mejores de las ultimas 24 horas' },
       { command: 'estado', description: 'Como va el sistema' },

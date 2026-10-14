@@ -9,6 +9,7 @@ import { setState } from '../core/db.js';
 import { child } from '../core/logger.js';
 import { estadoDeLasTareas } from '../worker/vigilante.js';
 import { datosResumen } from './datos/resumen.js';
+import { resumenRobots } from '../worker/robots.js';
 import { datosTokens } from './datos/tokens.js';
 import { datosToken } from './datos/token.js';
 import { datosAlertas } from './datos/alertas.js';
@@ -52,6 +53,7 @@ export function registrarApiPanel(app: FastifyInstance): void {
   });
 
   app.get('/api/panel/resumen', async () => guardada('resumen', 20_000, datosResumen));
+  app.get('/api/panel/robots', async () => guardada('robots', 20_000, resumenRobots));
   app.get('/api/panel/tokens', async (req) => datosTokens(consulta(req)));
 
   app.get('/api/panel/token/:chain/:address', async (req: FastifyRequest, reply: FastifyReply) => {

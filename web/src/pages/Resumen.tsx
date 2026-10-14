@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Activity, Bell, Eye, Filter, Radar, ScanSearch } from 'lucide-react';
+import { Activity, Bell } from 'lucide-react';
 import { useApi } from '../api/hooks';
-import type { Resumen as DatosResumen, TokenFila } from '../api/types';
+import type { Resumen as DatosResumen, ResumenRobot, TokenFila } from '../api/types';
 import { PageHeader, Section } from '../components/ui/PageHeader';
-import { StatTile } from '../components/ui/StatTile';
 import { Card } from '../components/ui/Card';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { Meter } from '../components/ui/Meter';
@@ -15,6 +14,7 @@ import { Badge } from '../components/ui/Badge';
 import { ChartCard } from '../components/charts/ChartCard';
 import { TokenCell, rutaToken } from '../components/domain/TokenCell';
 import { AlertKindBadge, ChainBadge } from '../components/domain/Badges';
+import { RobotCard, RobotCardSkeleton } from '../components/domain/RobotCard';
 import { fmtNum, fmtUsd, timeAgo } from '../lib/format';
 import { NIVEL_LOG } from '../lib/labels';
 
@@ -31,12 +31,13 @@ const columnasTop: Array<Column<TokenFila>> = [
 export default function Resumen() {
   const navegar = useNavigate();
   const q = useApi<DatosResumen>('/api/panel/resumen', { refrescoMs: 60_000 });
+  const robots = useApi<ResumenRobot[]>('/api/panel/robots', { refrescoMs: 60_000 });
   const [serie, setSerie] = useState<'detectados' | 'analizados'>('detectados');
   const d = q.data;
 
   return (
     <>
-      <PageHeader title="Resumen" sub="Estado del radar en tiempo real. Se actualiza solo cada minuto." />
+      <PageHeader title="Resumen" sub="Estado de los tres robots en tiempo real. Se actualiza solo cada minuto." />
 
       {q.error && !d ? (
         <Card>
@@ -44,13 +45,22 @@ export default function Resumen() {
         </Card>
       ) : (
         <>
-          <div className="grid grid--stats">
-            <StatTile loading={!d} icon={<Radar />} label="Detectados hoy" value={fmtNum(d?.stats.tokensToday)} hint={`${fmtNum(d?.stats.totalTokens)} en total`} />
-            <StatTile loading={!d} icon={<ScanSearch />} label="Analizados a fondo" value={fmtNum(d?.stats.enrichedToday)} hint="hoy" />
-            <StatTile loading={!d} icon={<Bell />} label="Alertas enviadas" value={fmtNum(d?.stats.alertsToday)} hint="hoy" />
-            <StatTile loading={!d} icon={<Eye />} label="En seguimiento" value={fmtNum(d?.stats.tracked)} hint="ahora mismo" />
-            <StatTile loading={!d} icon={<Filter />} label="Descartados" value={fmtNum(d?.stats.discardedToday)} hint="hoy, por el filtro" />
-          </div>
+          <Section
+            title="Los 3 robots"
+            sub="Si cada robot esta funcionando y lo que ha sacado hoy. Cada tarjeta lleva a su pagina con todo el detalle."
+          >
+            {robots.error && !robots.data ? (
+              <Card>
+                <ErrorState error={robots.error} onRetry={() => void robots.refetch()} />
+              </Card>
+            ) : (
+              <div className="grid grid--3">
+                {robots.data
+                  ? robots.data.map((r) => <RobotCard key={r.id} robot={r} />)
+                  : [0, 1, 2].map((i) => <RobotCardSkeleton key={i} />)}
+              </div>
+            )}
+          </Section>
 
           <div style={{ marginTop: 16 }}>
             <ChartCard
