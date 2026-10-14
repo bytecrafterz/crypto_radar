@@ -8,11 +8,17 @@ import { datosAciertoRobot3 } from './convergencia.js';
 
 export async function datosResultados() {
   const [resultados, porNota, mejores, comparativa, latencia, robot3] = await Promise.all([
-    query<{ outcome: string; count: number; avg_peak: unknown }>(
-      `SELECT outcome, COUNT(*)::int AS count, AVG(peak_multiple) AS avg_peak
+    // MEDIANAS, NO MEDIAS
+    // Hay tokens que se detectan con un precio de practicamente cero y luego
+    // salen "multiplicados por 99.999.999": la media de un grupo la decide
+    // ese unico caso absurdo (un "maximo medio" de 175.000x). La mediana dice
+    // lo que le paso al token tipico del grupo.
+    query<{ outcome: string; count: number; mediana_pico: unknown }>(
+      `SELECT outcome, COUNT(*)::int AS count,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY peak_multiple) AS mediana_pico
          FROM token_outcomes GROUP BY outcome ORDER BY count DESC`,
     ),
-    query<{ bucket: string; total: number; exitos: number; rugs: number; avg_peak: unknown }>(
+    query<{ bucket: string; total: number; exitos: number; rugs: number; mediana_pico: unknown }>(
       `SELECT CASE WHEN score_at_detection >= 80 THEN '80-100'
                    WHEN score_at_detection >= 65 THEN '65-79'
                    WHEN score_at_detection >= 50 THEN '50-64'
@@ -20,7 +26,7 @@ export async function datosResultados() {
               COUNT(*)::int AS total,
               COUNT(*) FILTER (WHERE outcome = 'exito')::int AS exitos,
               COUNT(*) FILTER (WHERE outcome = 'rug')::int AS rugs,
-              AVG(peak_multiple) AS avg_peak
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY peak_multiple) AS mediana_pico
          FROM token_outcomes
         WHERE score_at_detection IS NOT NULL
         GROUP BY bucket
@@ -29,11 +35,14 @@ export async function datosResultados() {
     query<{ symbol: string | null; chain: string; address: string; peak_multiple: unknown; outcome: string; score_at_detection: unknown }>(
       `SELECT t.symbol, t.chain, t.address, o.peak_multiple, o.outcome, o.score_at_detection
          FROM token_outcomes o JOIN tokens t ON t.id = o.token_id
+        -- Fuera los que se detectaron sin valor real: su "subida" es una
+        -- division por casi cero, no algo que hubiera podido aprovecharse.
+        WHERE o.peak_multiple < 99999999 AND COALESCE(o.entry_market_cap, 0) >= 1000
         ORDER BY o.peak_multiple DESC NULLS LAST LIMIT 20`,
     ),
     // Comparacion honesta: los tokens con nota alta contra TODOS los
     // analizados. Si el sistema no bate a la media, no esta aportando nada.
-    query<{ grupo: string; tokens: number; media_multiplo: unknown; media_neto: unknown; pct_exito: unknown }>(
+    query<{ grupo: string; tokens: number; mediana_multiplo: unknown; mediana_neto: unknown; pct_exito: unknown }>(
       `WITH base AS (
          SELECT t.id, s.opportunity,
                 (SELECT price_multiple FROM token_horizons h WHERE h.token_id = t.id AND h.horizon = 'h24' LIMIT 1) AS mult,
@@ -43,15 +52,18 @@ export async function datosResultados() {
           WHERE t.enriched_at IS NOT NULL
        )
        SELECT 'Puntuacion alta (>=65)' AS grupo, COUNT(*)::int AS tokens,
-              ROUND(AVG(mult)::numeric, 2) AS media_multiplo, ROUND(AVG(neto)::numeric, 2) AS media_neto,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY mult) AS mediana_multiplo,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY neto) AS mediana_neto,
               ROUND((COUNT(*) FILTER (WHERE mult >= 1.5)::numeric / NULLIF(COUNT(*), 0) * 100), 0) AS pct_exito
          FROM base WHERE opportunity >= 65 AND mult IS NOT NULL
        UNION ALL
-       SELECT 'Puntuacion baja (<50)', COUNT(*)::int, ROUND(AVG(mult)::numeric, 2), ROUND(AVG(neto)::numeric, 2),
+       SELECT 'Puntuacion baja (<50)', COUNT(*)::int,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY mult), percentile_cont(0.5) WITHIN GROUP (ORDER BY neto),
               ROUND((COUNT(*) FILTER (WHERE mult >= 1.5)::numeric / NULLIF(COUNT(*), 0) * 100), 0)
          FROM base WHERE opportunity < 50 AND mult IS NOT NULL
        UNION ALL
-       SELECT 'Todos (equivale a elegir al azar)', COUNT(*)::int, ROUND(AVG(mult)::numeric, 2), ROUND(AVG(neto)::numeric, 2),
+       SELECT 'Todos (equivale a elegir al azar)', COUNT(*)::int,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY mult), percentile_cont(0.5) WITHIN GROUP (ORDER BY neto),
               ROUND((COUNT(*) FILTER (WHERE mult >= 1.5)::numeric / NULLIF(COUNT(*), 0) * 100), 0)
          FROM base WHERE mult IS NOT NULL`,
     ),
@@ -60,14 +72,14 @@ export async function datosResultados() {
   ]);
 
   return {
-    resultados: resultados.map((r) => ({ outcome: r.outcome, n: r.count, picoMedio: num(r.avg_peak) })),
-    porNota: porNota.map((b) => ({ tramo: b.bucket, total: b.total, exitos: b.exitos, rugs: b.rugs, picoMedio: num(b.avg_peak) })),
+    resultados: resultados.map((r) => ({ outcome: r.outcome, n: r.count, picoMediano: num(r.mediana_pico) })),
+    porNota: porNota.map((b) => ({ tramo: b.bucket, total: b.total, exitos: b.exitos, rugs: b.rugs, picoMediano: num(b.mediana_pico) })),
     mejores: mejores.map((b) => ({
       symbol: b.symbol, chain: b.chain, address: b.address,
       pico: num(b.peak_multiple), outcome: b.outcome, nota: num(b.score_at_detection),
     })),
     comparativa: comparativa.map((c) => ({
-      grupo: c.grupo, tokens: c.tokens, multiplo: num(c.media_multiplo), neto: num(c.media_neto), pctExito: num(c.pct_exito),
+      grupo: c.grupo, tokens: c.tokens, multiplo: num(c.mediana_multiplo), neto: num(c.mediana_neto), pctExito: num(c.pct_exito),
     })),
     latencia: latencia && latencia.muestras > 0
       ? {

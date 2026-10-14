@@ -57,6 +57,7 @@ export default function Resumen() {
               title={serie === 'detectados' ? 'Tokens detectados por hora' : 'Tokens analizados por hora'}
               sub="Ultimas 24 horas completas"
               height={190}
+              desdeCero
               format={(v) => fmtNum(v)}
               points={(d?.porHora ?? []).map((h) => ({ ts: h.ts, value: serie === 'detectados' ? h.detectados : h.analizados }))}
               extra={

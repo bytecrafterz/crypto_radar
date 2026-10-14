@@ -86,15 +86,15 @@ export default function Resultados() {
 
       <Section
         title="¿Aciertan mas las notas altas que elegir al azar?"
-        sub="La prueba que de verdad importa: los tokens con nota alta contra todos los analizados. El neto descuenta lo que costaria entrar y salir."
+        sub="La prueba que de verdad importa: los tokens con nota alta contra todos los analizados. Son medianas (el token tipico de cada grupo); el neto descuenta lo que costaria entrar y salir."
       >
         <Card flush>
           <DataTable
             columns={[
               { key: 'g', header: 'Grupo', cell: (c) => <b>{c.grupo}</b> },
               { key: 't', header: 'Tokens', align: 'right', cell: (c) => fmtNum(c.tokens) },
-              { key: 'm', header: 'Multiplo medio 24 h', align: 'right', cell: (c) => fmtMultiple(c.multiplo) },
-              { key: 'n', header: 'Neto tras costes', align: 'right', cell: (c) => fmtMultiple(c.neto) },
+              { key: 'm', header: 'Multiplo mediano 24 h', align: 'right', cell: (c) => fmtMultiple(c.multiplo) },
+              { key: 'n', header: 'Neto mediano tras costes', align: 'right', cell: (c) => fmtMultiple(c.neto) },
               { key: 'e', header: 'Suben 1,5x', align: 'right', cell: (c) => (c.pctExito !== null ? fmtPct(c.pctExito, 0) : '–') },
             ]}
             rows={d?.comparativa}
@@ -130,7 +130,7 @@ export default function Resultados() {
               { key: 't', header: 'Tokens', align: 'right', cell: (b) => fmtNum(b.total) },
               { key: 'e', header: 'Exitos', align: 'right', cell: (b) => <span className="text-good">{fmtNum(b.exitos)} ({pct(b.exitos, b.total)})</span> },
               { key: 'r', header: 'Rugs', align: 'right', cell: (b) => <span className="text-critical">{fmtNum(b.rugs)} ({pct(b.rugs, b.total)})</span> },
-              { key: 'p', header: 'Maximo medio', align: 'right', cell: (b) => fmtMultiple(b.picoMedio) },
+              { key: 'p', header: 'Maximo mediano', align: 'right', cell: (b) => fmtMultiple(b.picoMediano) },
             ]}
             rows={d?.porNota}
             rowKey={(b) => b.tramo}
@@ -170,7 +170,7 @@ export default function Resultados() {
                 { key: 'n', header: 'Tokens', align: 'right', cell: (g) => fmtNum(g.n) },
                 { key: 'e', header: 'Exitos', align: 'right', cell: (g) => <span className="text-good">{pct(g.exitos, g.n)}</span> },
                 { key: 'r', header: 'Rugs', align: 'right', cell: (g) => <span className="text-critical">{pct(g.rugs, g.n)}</span> },
-                { key: 'p', header: 'Pico medio', align: 'right', cell: (g) => fmtMultiple(g.picoMedio) },
+                { key: 'p', header: 'Pico mediano', align: 'right', cell: (g) => fmtMultiple(g.picoMediano) },
               ]}
               rows={d?.robot3.grupos}
               rowKey={(g) => String(g.conTelegram)}
@@ -182,7 +182,7 @@ export default function Resultados() {
         </div>
       </Section>
 
-      <Section title="Los que mas subieron" sub="Los 20 tokens cerrados con mayor subida desde la deteccion.">
+      <Section title="Los que mas subieron" sub="Los 20 tokens cerrados con mayor subida desde la deteccion, sin los que se detectaron con un valor de practicamente cero.">
         <Card flush>
           <DataTable
             columns={[

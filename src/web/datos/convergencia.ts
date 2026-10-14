@@ -134,13 +134,13 @@ export async function datosAciertoRobot3() {
          FROM res WHERE maximo IS NOT NULL
         GROUP BY nivel`,
     ),
-    query<{ con_telegram: boolean; n: number; exitos: number; rugs: number; pico_medio: unknown }>(
+    query<{ con_telegram: boolean; n: number; exitos: number; rugs: number; pico_mediano: unknown }>(
       `SELECT EXISTS (SELECT 1 FROM tg_mentions me
                        WHERE me.chain = t.chain AND me.address = t.address) AS con_telegram,
               COUNT(*)::int AS n,
               COUNT(*) FILTER (WHERE o.outcome = 'exito')::int AS exitos,
               COUNT(*) FILTER (WHERE o.outcome = 'rug')::int AS rugs,
-              AVG(o.peak_multiple) AS pico_medio
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY o.peak_multiple) AS pico_mediano
          FROM token_outcomes o JOIN tokens t ON t.id = o.token_id
         GROUP BY 1`,
     ),
@@ -160,7 +160,7 @@ export async function datosAciertoRobot3() {
         n: g?.n ?? 0,
         exitos: g?.exitos ?? 0,
         rugs: g?.rugs ?? 0,
-        picoMedio: num(g?.pico_medio),
+        picoMediano: num(g?.pico_mediano),
       };
     }),
   };

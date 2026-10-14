@@ -82,5 +82,16 @@ export const ESTADOS_CANAL: Record<string, { texto: string; tono: Tono }> = {
   abandonado: { texto: 'Abandonado', tono: 'warning' },
 };
 
+/** Movimientos sospechosos que detecta el Robot 1. */
+export const SOSPECHOSOS: Record<string, string> = {
+  liquidity_removed: 'Liquidez retirada',
+  price_crash: 'Caida de precio',
+  bot_pattern: 'Patron de bots',
+  wash_trading: 'Wash trading',
+  sell_pressure: 'Presion vendedora',
+  sniper_cluster: 'Compras en el mismo bloque',
+  volume_without_holders: 'Volumen sin holders',
+};
+
 export const SEVERIDAD: Record<string, Tono> = { danger: 'critical', warn: 'warning', info: 'neutral' };
 export const NIVEL_LOG: Record<string, Tono> = { error: 'critical', warn: 'warning', info: 'neutral' };

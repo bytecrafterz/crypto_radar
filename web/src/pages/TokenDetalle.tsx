@@ -22,7 +22,7 @@ import {
   BoolBadge, ChainBadge, LevelBadge, MessageClassBadge, OpportunityBadge, RiskBadge, TokenStatusBadge,
 } from '../components/domain/Badges';
 import { fmtDate, fmtMultiple, fmtNum, fmtPct, fmtPrice, fmtUsd, timeAgo } from '../lib/format';
-import { SEVERIDAD } from '../lib/labels';
+import { SEVERIDAD, SOSPECHOSOS } from '../lib/labels';
 
 const pct = (v: number | null) => (v !== null ? fmtPct(v) : 'n/d');
 
@@ -137,8 +137,8 @@ export default function TokenDetalle() {
       </div>
 
       <div className="grid grid--stats">
-        <StatTile label="Oportunidad" value={<OpportunityBadge value={t.opportunity} />} hint={s?.opportunityLabel ?? undefined} />
-        <StatTile label="Riesgo" value={<RiskBadge value={t.risk} />} hint={s?.riskLabel ?? undefined} />
+        <StatTile label="Oportunidad" value={<OpportunityBadge value={t.opportunity} />} hint="0-100, mas es mejor" />
+        <StatTile label="Riesgo" value={<RiskBadge value={t.risk} />} hint="0-100, mas es peor" />
         <StatTile label="Precio" value={fmtPrice(t.price)} hint={`maximo ${fmtPrice(t.peakPrice)}`} />
         <StatTile label="Liquidez" value={fmtUsd(t.liquidity)} hint={`maxima ${fmtUsd(t.peakLiquidity)}`} />
         <StatTile label="Capitalizacion" value={fmtUsd(t.marketCap)} hint={`maxima ${fmtUsd(t.peakMarketCap)}`} />
@@ -224,7 +224,7 @@ export default function TokenDetalle() {
                   key: 'dice',
                   header: 'Lo que dice (en espanol)',
                   cell: (m) => (
-                    <div className="stack" style={{ gap: 4 }}>
+                    <div className="stack" style={{ gap: 4, alignItems: 'flex-start' }}>
                       <span className={m.resumen ? 'small' : 'small dim'}>{m.resumen ?? m.texto}</span>
                       {m.clase && <MessageClassBadge clase={m.clase} />}
                     </div>
@@ -408,7 +408,7 @@ export default function TokenDetalle() {
             <ul className="feed">
               {q.data.sospechosos.map((m, i) => (
                 <li key={i} className="feed__item">
-                  <Badge tono={SEVERIDAD[m.severity] ?? 'neutral'}>{m.kind}</Badge>
+                  <Badge tono={SEVERIDAD[m.severity] ?? 'neutral'}>{SOSPECHOSOS[m.kind] ?? m.kind}</Badge>
                   <div className="feed__main small">{m.detail}</div>
                   <span className="feed__meta nowrap">{timeAgo(m.ts)}</span>
                 </li>

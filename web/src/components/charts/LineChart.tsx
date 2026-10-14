@@ -14,6 +14,8 @@ interface LineChartProps {
   label: string;
   height?: number;
   color?: string;
+  /** Para recuentos: el eje empieza en cero y las variaciones no se exageran. */
+  desdeCero?: boolean;
 }
 
 const PAD = { top: 12, right: 12, bottom: 26, left: 58 };
@@ -39,7 +41,7 @@ function useAncho<T extends HTMLElement>() {
  * finas y un cursor vertical que se pega al punto mas cercano y ensena su
  * valor. Con una sola serie no hace falta leyenda: el titulo dice que es.
  */
-export function LineChart({ points, format, label, height = 200, color = 'var(--series-1)' }: LineChartProps) {
+export function LineChart({ points, format, label, height = 200, color = 'var(--series-1)', desdeCero }: LineChartProps) {
   const [ref, ancho] = useAncho<HTMLDivElement>();
   const [activo, setActivo] = useState<number | null>(null);
 
@@ -65,7 +67,7 @@ export function LineChart({ points, format, label, height = 200, color = 'var(--
   const plotW = w - PAD.left - PAD.right;
   const plotH = height - PAD.top - PAD.bottom;
 
-  let min = Math.min(...validos.map((p) => p.v));
+  let min = desdeCero ? 0 : Math.min(...validos.map((p) => p.v));
   let max = Math.max(...validos.map((p) => p.v));
   if (min === max) {
     min = min * 0.95;

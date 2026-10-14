@@ -12,13 +12,14 @@ interface ChartCardProps {
   format: (v: number) => string;
   height?: number;
   extra?: ReactNode;
+  desdeCero?: boolean;
 }
 
 /**
  * Tarjeta con un grafico y su version en tabla. La tabla es el gemelo
  * accesible del grafico: los mismos valores, sin depender de ver la linea.
  */
-export function ChartCard({ title, sub, points, format, height, extra }: ChartCardProps) {
+export function ChartCard({ title, sub, points, format, height, extra, desdeCero }: ChartCardProps) {
   const [tabla, setTabla] = useState(false);
   const validos = points.filter((p) => p.value !== null);
 
@@ -61,7 +62,7 @@ export function ChartCard({ title, sub, points, format, height, extra }: ChartCa
           </table>
         </div>
       ) : (
-        <LineChart points={points} format={format} label={title} height={height} />
+        <LineChart points={points} format={format} label={title} height={height} desdeCero={desdeCero} />
       )}
     </Card>
   );
