@@ -8,6 +8,7 @@
  */
 import { query, queryOne } from '../core/db.js';
 import { getDashboardStats } from '../core/repo.js';
+import { fmtNum } from '../core/util.js';
 import { estadoDeLasTareas, type EstadoTarea } from './vigilante.js';
 
 export type EstadoRobot = 'funcionando' | 'parado' | 'arrancando';
@@ -86,7 +87,7 @@ export async function resumenRobots(): Promise<ResumenRobot[]> {
   return [
     {
       id: 'robot1',
-      nombre: 'Robot 1 · Radar de oportunidades',
+      nombre: 'Robot 1 · Oportunidades',
       funcion: 'Detecta tokens nuevos en Solana y Base, los analiza a fondo y avisa de oportunidades y peligros.',
       ...de('robot1'),
       cifras: [
@@ -95,12 +96,12 @@ export async function resumenRobots(): Promise<ResumenRobot[]> {
         { etiqueta: 'Avisos de oportunidad', valor: r1?.oportunidad ?? 0 },
         { etiqueta: 'Avisos de peligro', valor: r1?.peligro ?? 0 },
       ],
-      nota: `${stats.tracked} tokens en seguimiento ahora mismo.`,
+      nota: `${fmtNum(stats.tracked)} tokens en seguimiento ahora mismo.`,
       ruta: '/tokens',
     },
     {
       id: 'robot2',
-      nombre: 'Robot 2 · Radar de Telegram',
+      nombre: 'Robot 2 · Telegram',
       funcion: 'Lee canales de Telegram, separa la informacion del ruido y anota que tokens se mencionan y cuando.',
       ...de('robot2'),
       cifras: [
