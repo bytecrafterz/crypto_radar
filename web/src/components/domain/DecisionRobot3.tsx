@@ -30,7 +30,15 @@ export function ReglasTabla({ reglas, conDefinicion = true }: { reglas: Regla[];
           cell: (r) => (
             <div className="stack" style={{ gap: 3 }}>
               <span>{r.regla}</span>
-              <span className="dim xs">{r.robot}</span>
+              <span className="dim xs">
+                {r.robot}
+                {conDefinicion && (
+                  <>
+                    {' · '}
+                    <span className="mono">{r.definida}</span>
+                  </>
+                )}
+              </span>
             </div>
           ),
         },
@@ -50,9 +58,6 @@ export function ReglasTabla({ reglas, conDefinicion = true }: { reglas: Regla[];
               </Badge>
             ),
         },
-        ...(conDefinicion
-          ? [{ key: 'def', header: 'Definida en', hideOnMobile: true, cell: (r: Regla) => <span className="mono xs dim">{r.definida}</span> }]
-          : []),
       ]}
       rows={reglas}
       rowKey={(r) => r.codigo}
@@ -183,9 +188,16 @@ export function DecisionRobot3({ d }: { d: Decision }) {
                 cell: (m) => (
                   <div className="stack" style={{ gap: 4, alignItems: 'flex-start' }}>
                     {m.resumen && <span className="small">{m.resumen}</span>}
-                    <span className="small dim" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                      {m.texto}
+                    <span className="small dim" style={{ wordBreak: 'break-word' }}>
+                      {m.texto.length > 260 ? `${m.texto.slice(0, 260).replace(/\s+/g, ' ')}…` : m.texto}
                     </span>
+                    {m.texto.length > 260 && (
+                      <Disclosure summary="Ver mensaje completo">
+                        <span className="small dim" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                          {m.texto}
+                        </span>
+                      </Disclosure>
+                    )}
                     {m.clase && <MessageClassBadge clase={m.clase} />}
                   </div>
                 ),

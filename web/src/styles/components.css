@@ -1073,8 +1073,9 @@
 }
 .reglas-mini li {
   display: grid;
-  grid-template-columns: 16px 1fr auto;
-  gap: 8px;
+  grid-template-columns: 16px 1fr;
+  column-gap: 8px;
+  row-gap: 1px;
   align-items: baseline;
 }
 .reglas-mini li > svg {
@@ -1091,16 +1092,8 @@
   font-weight: 560;
 }
 .reglas-mini__valor {
-  text-align: right;
-  white-space: nowrap;
+  grid-column: 2;
+  font-size: var(--fs-xs);
+  color: var(--text-2);
   font-variant-numeric: tabular-nums;
-}
-@media (max-width: 640px) {
-  .reglas-mini li {
-    grid-template-columns: 16px 1fr;
-  }
-  .reglas-mini__valor {
-    grid-column: 2;
-    text-align: left;
-  }
 }
