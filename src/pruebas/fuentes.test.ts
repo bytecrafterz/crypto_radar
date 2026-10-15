@@ -18,19 +18,19 @@ const m = (canal: number, hash: string | null, minuto: number, util = true): Men
 test('un canal que habla varias veces del token es UNA fuente, no varias', () => {
   // El caso de DIABLO: cuatro mensajes distintos, todos del mismo canal.
   const r = contarFuentes([m(7, 'a', 0), m(7, 'b', 5), m(7, 'c', 9), m(7, 'd', 20)]);
-  assert.deepEqual(r, { total: 1, independientes: 1 });
+  assert.deepEqual(r, { total: 1, independientes: 1, autores: [7] });
 });
 
 test('nunca hay mas fuentes independientes que canales', () => {
   // El caso de TRENDS: cinco textos repartidos entre dos canales.
   const r = contarFuentes([m(1, 'a', 0), m(1, 'b', 1), m(1, 'c', 2), m(2, 'd', 3), m(2, 'e', 4)]);
-  assert.deepEqual(r, { total: 2, independientes: 2 });
+  assert.deepEqual(r, { total: 2, independientes: 2, autores: [1, 2] });
 });
 
 test('el canal que copia el texto de otro no es independiente', () => {
   // Cinco canales publicando lo mismo: una sola fuente, la que lo dijo primero.
   const r = contarFuentes([m(1, 'x', 0), m(2, 'x', 3), m(3, 'x', 4), m(4, 'x', 6), m(5, 'x', 8)]);
-  assert.deepEqual(r, { total: 5, independientes: 1 });
+  assert.deepEqual(r, { total: 5, independientes: 1, autores: [1] });
 });
 
 test('el autor es quien lo publico antes, aunque la fila llegue despues', () => {
@@ -38,37 +38,37 @@ test('el autor es quien lo publico antes, aunque la fila llegue despues', () => 
   // de una vuelta a otra con los mismos datos.
   const a = contarFuentes([m(2, 'x', 5), m(1, 'x', 1), m(2, 'y', 6)]);
   const b = contarFuentes([m(1, 'x', 1), m(2, 'x', 5), m(2, 'y', 6)]);
-  assert.deepEqual(a, { total: 2, independientes: 2 });
+  assert.deepEqual(a, { total: 2, independientes: 2, autores: [1, 2] });
   assert.deepEqual(b, a);
 });
 
 test('quien solo repite lo de otros no suma, aunque tambien publique algo suyo sin interes', () => {
   // El canal 2 copia a 1, y lo unico propio que dice es publicidad.
   const r = contarFuentes([m(1, 'x', 0), m(2, 'x', 2), m(2, 'promo', 3, false)]);
-  assert.deepEqual(r, { total: 2, independientes: 1 });
+  assert.deepEqual(r, { total: 2, independientes: 1, autores: [1] });
 });
 
 test('la publicidad no cuenta como fuente independiente', () => {
   const r = contarFuentes([m(1, 'a', 0, false), m(2, 'b', 1, false)]);
-  assert.deepEqual(r, { total: 2, independientes: 0 });
+  assert.deepEqual(r, { total: 2, independientes: 0, autores: [] });
 });
 
 test('un texto cuenta como util si alguno de sus mensajes lo es', () => {
   // El clasificador puede haber visto la copia y no el original todavia.
   const r = contarFuentes([m(1, 'x', 0, false), m(2, 'x', 1, true)]);
-  assert.deepEqual(r, { total: 2, independientes: 1 });
+  assert.deepEqual(r, { total: 2, independientes: 1, autores: [1] });
 });
 
 test('dos canales que dicen cosas distintas por su cuenta son dos fuentes', () => {
   const r = contarFuentes([m(1, 'a', 0), m(2, 'b', 1)]);
-  assert.deepEqual(r, { total: 2, independientes: 2 });
+  assert.deepEqual(r, { total: 2, independientes: 2, autores: [1, 2] });
 });
 
 test('un mensaje sin texto cuenta como unico y no se confunde con otros sin texto', () => {
   const r = contarFuentes([m(1, null, 0), m(2, null, 0)]);
-  assert.deepEqual(r, { total: 2, independientes: 2 });
+  assert.deepEqual(r, { total: 2, independientes: 2, autores: [1, 2] });
 });
 
 test('sin menciones no hay fuentes', () => {
-  assert.deepEqual(contarFuentes([]), { total: 0, independientes: 0 });
+  assert.deepEqual(contarFuentes([]), { total: 0, independientes: 0, autores: [] });
 });

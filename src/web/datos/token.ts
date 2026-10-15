@@ -7,6 +7,19 @@ import * as tracking from '../../core/tracking.js';
 import { safeUrl } from '../../core/util.js';
 import { addressExplorer, enlaceCompra, explorer, iso, num } from './comun.js';
 import { datosTelegramToken } from './telegram.js';
+import { calculoNota, datosDecisionRobot3 } from './decision.js';
+import { queryOne } from '../../core/db.js';
+
+const FUENTE_MERCADO: Record<string, string> = {
+  dexscreener: 'DexScreener',
+  geckoterminal: 'GeckoTerminal',
+  seguimiento: 'DexScreener (GeckoTerminal si falla), en la vuelta de seguimiento',
+};
+
+function enlaceTx(chain: string, tx: string | null): string | null {
+  if (!tx) return null;
+  return chain === 'solana' ? `https://solscan.io/tx/${tx}` : `https://basescan.org/tx/${tx}`;
+}
 
 const HORIZONTES: Record<string, string> = {
   m5: '5 min', m15: '15 min', h1: '1 hora', h6: '6 horas', h24: '24 horas', d7: '7 dias',
@@ -25,7 +38,7 @@ export async function datosToken(chain: string, address: string) {
   const HORAS_SERIE = 72;
   const serieDesdeDeteccion = Date.now() - token.first_seen.getTime() > HORAS_SERIE * 3_600_000;
 
-  const [security, holders, deployer, score, suspicious, series, horizons, cambios, telegram] =
+  const [security, holders, deployer, score, suspicious, series, horizons, cambios, telegram, decision, mercado] =
     await Promise.all([
       repo.getLatestSecurity(token.id),
       repo.getLatestHolders(token.id),
@@ -36,7 +49,15 @@ export async function datosToken(chain: string, address: string) {
       tracking.getHorizons(token.id),
       tracking.getSecurityChanges(token.id),
       datosTelegramToken(token.chain, token.address),
+      datosDecisionRobot3(token.chain, token.address),
+      Promise.all([
+        queryOne<{ ts: Date; source: string }>(
+          'SELECT ts, source FROM token_snapshots WHERE token_id = $1 ORDER BY ts ASC LIMIT 1', [token.id]),
+        queryOne<{ ts: Date; source: string }>(
+          'SELECT ts, source FROM token_snapshots WHERE token_id = $1 ORDER BY ts DESC LIMIT 1', [token.id]),
+      ]),
     ]);
+  const [primeraMedicion, ultimaMedicion] = mercado;
 
   const compra = enlaceCompra(token.chain, token.address, token.dex, token.pair_address);
   const topHolders = (holders?.top_holders ?? []) as Array<{ address: string; pct: number; tag: string }>;
@@ -80,8 +101,70 @@ export async function datosToken(chain: string, address: string) {
           vetos: ((score.critical_vetoes ?? []) as Array<{ text: string }>).map((v) => v.text),
           evaluable: score.evaluable !== false,
           costeOperar: execution?.note ?? null,
+          calculo: calculoNota({
+            opportunity: score.opportunity, risk: score.risk,
+            opportunity_reasons: score.opportunity_reasons, risk_reasons: score.risk_reasons,
+          }),
         }
       : null,
+    // De donde sale cada dato y cuando se tomo, para poder comprobarlo.
+    origen: [
+      {
+        dato: 'Deteccion y primeros datos de mercado',
+        fuente: primeraMedicion ? (FUENTE_MERCADO[primeraMedicion.source] ?? primeraMedicion.source) : 'n/d',
+        hora: iso(primeraMedicion?.ts ?? token.first_seen),
+        detalle: 'Precio, capitalizacion y liquidez con los que se mide todo lo que pasa despues.',
+        enlace: null as string | null,
+      },
+      {
+        dato: 'Precio, liquidez, capitalizacion y volumen actuales',
+        fuente: ultimaMedicion ? (FUENTE_MERCADO[ultimaMedicion.source] ?? ultimaMedicion.source) : 'n/d',
+        hora: iso(ultimaMedicion?.ts),
+        detalle: 'Ultima medicion guardada (tabla token_snapshots).',
+        enlace: null as string | null,
+      },
+      {
+        dato: 'Seguridad del contrato y de la liquidez',
+        fuente: security
+          ? [((security.sources ?? []) as string[]).join(', ') || 'n/d',
+             ((security.failed_sources ?? []) as string[]).length > 0
+               ? `sin respuesta: ${((security.failed_sources ?? []) as string[]).join(', ')}` : null]
+              .filter(Boolean).join(' · ')
+          : 'sin analisis todavia',
+        hora: iso(security?.ts),
+        detalle: 'Autoridades, permisos, comisiones, honeypot y liquidez bloqueada (tabla security_reports).',
+        enlace: null as string | null,
+      },
+      {
+        dato: 'Holders y concentracion',
+        fuente: (holders?.note as string | null) ?? (holders ? 'blockchain' : 'sin datos todavia'),
+        hora: iso(holders?.ts),
+        detalle: 'Descontando pool, quemado y contratos (tabla holder_snapshots).',
+        enlace: null as string | null,
+      },
+      {
+        dato: 'Creador del token',
+        fuente: deployer ? 'Transaccion de creacion en la blockchain' : 'no identificado',
+        hora: iso(deployer?.ts),
+        detalle: 'Quien lo creo, sus tokens anteriores y quien le financio (tabla deployer_reports).',
+        enlace: enlaceTx(token.chain, (deployer?.deploy_tx as string | null) ?? null),
+      },
+      {
+        dato: 'Nota de oportunidad y de riesgo',
+        fuente: 'Calculada por el Robot 1 (src/scoring/engine.ts) con las reglas de config/scoring.yaml',
+        hora: iso(score?.ts),
+        detalle: 'Cada punto con su motivo (tabla scores).',
+        enlace: null as string | null,
+      },
+      {
+        dato: 'Coste real de comprar y vender',
+        fuente: execution?.note?.includes('Jupiter') ? 'Jupiter (cotizacion real)' : 'Estimacion por la liquidez del pool',
+        hora: iso(score?.ts),
+        detalle: execution?.note ?? 'Sin medicion.',
+        enlace: null as string | null,
+      },
+    ],
+    decision,
     seguridad: security
       ? {
           mintActiva: bool(security.mint_authority_active),

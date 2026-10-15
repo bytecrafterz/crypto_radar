@@ -43,3 +43,11 @@ test('la ficha ensena la primera mencion de cada canal aunque haya muchas de otr
   assert.deepEqual(vistas.map((x) => x.n), [1, 2, 3, 22, 23]);
   assert.deepEqual(elegirMenciones([m('a', 1), m('a', 2)], 15).map((x) => x.n), [1, 2]);
 });
+
+test('ROBOTS elige que robots arranca el proceso; vacio o invalido, todos', async () => {
+  const { robotsActivos } = await import('../worker/index.js');
+  assert.deepEqual([...robotsActivos('1')], [1]);
+  assert.deepEqual([...robotsActivos('2, 3')].sort(), [2, 3]);
+  assert.deepEqual([...robotsActivos('')].sort(), [1, 2, 3]);
+  assert.deepEqual([...robotsActivos('x,9')].sort(), [1, 2, 3]);
+});

@@ -6,6 +6,8 @@
  * token con 90 de social y 100 de riesgo no es un "60 regular": es un
  * descarte con mucho ruido, y hay que poder distinguirlo.
  */
+import { reglasDeVeredicto } from './decision.js';
+import type { ReglaAplicada } from '../../robot3/convergencia.js';
 import { query, queryOne } from '../../core/db.js';
 import { umbralesActuales } from '../../robot3/umbrales.js';
 import { iso, num, paginacion } from './comun.js';
@@ -41,6 +43,8 @@ export async function datosVeredictos(q: Record<string, string | undefined>) {
       detalle: {
         contradicciones?: string[]; confirmaciones?: string[];
         resumenes?: Array<{ texto: string; canal: string | null; clase: string | null }>;
+        motivo?: string;
+        reglas?: { maximo: ReglaAplicada[]; intermedio: ReglaAplicada[] };
       } | null;
       historial: Array<{ ts: string; nivel: string }> | null;
       en_seguimiento: boolean | null; precio_inicial: unknown; precio_actual: unknown;
@@ -94,6 +98,8 @@ export async function datosVeredictos(q: Record<string, string | undefined>) {
         resumenes: (f.detalle?.resumenes ?? []).slice(0, 2),
         confirmaciones: f.detalle?.confirmaciones ?? [],
         contradicciones: f.detalle?.contradicciones ?? [],
+        reglas: reglasDeVeredicto(f).maximo.map((r) => ({ regla: r.regla, robot: r.robot, exige: r.exige, valor: r.valor, cumple: r.cumple })),
+        reglasGuardadas: Boolean(f.detalle?.reglas),
       };
     }),
     total: total?.n ?? 0,

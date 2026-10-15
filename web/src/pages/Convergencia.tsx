@@ -115,6 +115,25 @@ function TarjetaVeredicto({ v }: { v: Veredicto }) {
           <MeterRow label="Evidencia" value={v.evidencia} />
         </div>
       </div>
+
+      <div className="divider" />
+      <div className="dim small" style={{ marginBottom: 6 }}>
+        Reglas de Convergencia fuerte{v.reglasGuardadas ? '' : ' (recalculadas con las reglas actuales)'}
+      </div>
+      <ul className="reglas-mini">
+        {v.reglas.map((r, i) => (
+          <li key={i} className={r.cumple ? 'is-ok' : 'is-ko'}>
+            {r.cumple ? <Check size={14} /> : <X size={14} />}
+            <span>{r.regla}</span>
+            <span className="reglas-mini__valor">
+              {r.valor} <span className="dim">· exige {r.exige}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <Link to={`/token/${v.chain}/${v.address}#decision-robot3`} className="row small" style={{ marginTop: 10, gap: 4 }}>
+        Ver la decision completa: datos comparados, mensajes y codigo <ArrowRight size={14} />
+      </Link>
     </Card>
   );
 }

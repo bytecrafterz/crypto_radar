@@ -7,6 +7,7 @@
  * juntan las cifras del dia de cada uno. Lo usan el panel y el bot.
  */
 import { query, queryOne } from '../core/db.js';
+import { getFilters } from '../core/config.js';
 import { getDashboardStats } from '../core/repo.js';
 import { fmtNum } from '../core/util.js';
 import { estadoDeLasTareas, type EstadoTarea } from './vigilante.js';
@@ -33,6 +34,45 @@ const TAREAS: Record<ResumenRobot['id'], (nombre: string) => boolean> = {
   robot2: (n) => n.startsWith('robot2-'),
   robot3: (n) => n.startsWith('robot3-'),
 };
+
+/**
+ * Cada cuanto da una vuelta cada tarea. Hace falta para juzgar los latidos
+ * de un robot que corre en OTRO proceso (ROBOTS=...): este proceso no tiene
+ * sus bucles apuntados, pero si ve sus latidos en la base de datos.
+ */
+function intervalos(): Record<string, number> {
+  const f = getFilters();
+  return {
+    deteccion: f.discovery.interval_seconds * 1000,
+    analisis: 60_000,
+    seguimiento: f.monitoring.interval_minutes * 60_000,
+    'robot2-colector': 30_000,
+    'robot2-descubrimiento': 2 * 3_600_000,
+    'robot2-lectura': 90_000,
+    'robot2-sincronizar': 3_600_000,
+    'robot2-anticipacion': 5 * 60_000,
+    'robot2-reputacion': 30 * 60_000,
+    'robot2-clasificador': 3 * 60_000,
+    'robot3-convergencia': 5 * 60_000,
+  };
+}
+
+/** Las tareas de los robots que no corren en este proceso, por sus latidos guardados. */
+async function tareasDeOtrosProcesos(locales: Set<string>): Promise<EstadoTarea[]> {
+  const filas = await query<{ key: string; value: number }>(
+    "SELECT key, value FROM system_state WHERE key LIKE 'latido:%'",
+  );
+  const iv = intervalos();
+  const ahora = Date.now();
+  return filas
+    .map((f) => ({ nombre: f.key.slice('latido:'.length), ultimo: Number(f.value) }))
+    .filter((t) => !locales.has(t.nombre) && iv[t.nombre] !== undefined && Number.isFinite(t.ultimo))
+    .map((t) => {
+      const margen = Math.max(15 * 60_000, iv[t.nombre] * 3);
+      const callada = ahora - t.ultimo;
+      return { nombre: t.nombre, ultimoLatido: t.ultimo, callada_ms: callada, margen_ms: margen, caida: callada > margen };
+    });
+}
 
 /**
  * Estado de un robot a partir de sus tareas.
@@ -79,7 +119,13 @@ export async function resumenRobots(): Promise<ResumenRobot[]> {
     ]),
   ]);
 
-  const de = (id: ResumenRobot['id']) => estadoDeRobot(tareas.filter((t) => TAREAS[id](t.nombre)));
+  // Un robot sin bucles en este proceso puede estar corriendo en otro: se
+  // le juzga por los latidos que deja en la base de datos.
+  const remotas = await tareasDeOtrosProcesos(new Set(tareas.map((t) => t.nombre)));
+  const de = (id: ResumenRobot['id']) => {
+    const locales = tareas.filter((t) => TAREAS[id](t.nombre));
+    return estadoDeRobot(locales.length > 0 ? locales : remotas.filter((t) => TAREAS[id](t.nombre)));
+  };
   const [niveles, avisosR3] = r3;
   const nivel = (n: string) => niveles.find((x) => x.nivel === n)?.n ?? 0;
   const cruzados = niveles.reduce((a, x) => a + x.n, 0);

@@ -53,6 +53,162 @@ export interface EntradaRobot2 {
 
 export type Nivel = 'descartado' | 'amarillo' | 'naranja' | 'rojo';
 
+/**
+ * Una regla del Robot 3 tal como se aplico: que exige, que valor tenia el
+ * token y si la cumplio. Es lo que el panel ensena regla por regla, para
+ * que quien revise vea exactamente que se comparo y por que salio el nivel.
+ */
+export interface ReglaAplicada {
+  codigo: string;
+  regla: string;
+  robot: 'Robot 1' | 'Robot 2' | 'Robot 1 y 2';
+  exige: string;
+  valor: string;
+  cumple: boolean;
+  /** Donde esta definida: fichero de configuracion o funcion del codigo. */
+  definida: string;
+}
+
+/** Lo que el Robot 3 compara, ya reducido a los valores que miran las reglas. */
+export interface DatosComparados {
+  tecnica: number;
+  riesgo: number;
+  vetado: boolean;
+  evaluable: boolean;
+  fuentesIndependientes: number;
+  reputacionMedia: number;
+  anticipacionSeg: number | null;
+  contradicciones: number;
+}
+
+const CONFIG = 'config/robot3.yaml';
+const CODIGO = 'src/robot3/convergencia.ts';
+
+function numero(v: number): string {
+  return String(Math.round(v * 10) / 10).replace('.', ',');
+}
+
+function reglasComunes(d: DatosComparados): ReglaAplicada[] {
+  return [
+    {
+      codigo: 'sin_veto',
+      regla: 'El Robot 1 no ha vetado el token',
+      robot: 'Robot 1',
+      exige: 'sin veto',
+      valor: d.vetado ? 'vetado' : 'sin veto',
+      cumple: !d.vetado,
+      definida: `${CODIGO} · decidir() (fijo, no se puede desactivar)`,
+    },
+    {
+      codigo: 'evaluable',
+      regla: 'El Robot 1 pudo comprobar lo esencial',
+      robot: 'Robot 1',
+      exige: 'si',
+      valor: d.evaluable ? 'si' : 'no',
+      cumple: d.evaluable,
+      definida: 'config/scoring.yaml · evaluability',
+    },
+  ];
+}
+
+/**
+ * Reglas del nivel maximo ("Convergencia fuerte"), el unico que avisa.
+ * decidir() usa esta misma lista: lo que ensena el panel es lo que se aplico.
+ */
+export function reglasNivelMaximo(d: DatosComparados, u: Umbrales): ReglaAplicada[] {
+  return [
+    ...reglasComunes(d),
+    {
+      codigo: 'tecnica_minima',
+      regla: 'Nota de oportunidad del Robot 1',
+      robot: 'Robot 1',
+      exige: `${u.tecnicaMinimaRojo} o mas`,
+      valor: numero(d.tecnica),
+      cumple: d.tecnica >= u.tecnicaMinimaRojo,
+      definida: `${CONFIG} · nivel_maximo.tecnica_minima`,
+    },
+    {
+      codigo: 'riesgo_maximo',
+      regla: 'Nota de riesgo del Robot 1',
+      robot: 'Robot 1',
+      exige: `${u.riesgoMaximoRojo} o menos`,
+      valor: numero(d.riesgo),
+      cumple: d.riesgo <= u.riesgoMaximoRojo,
+      definida: `${CONFIG} · nivel_maximo.riesgo_maximo`,
+    },
+    {
+      codigo: 'fuentes_independientes',
+      regla: 'Canales independientes (que no se copian entre si) con informacion util',
+      robot: 'Robot 2',
+      exige: `${u.fuentesIndepMinimasRojo} o mas`,
+      valor: String(d.fuentesIndependientes),
+      cumple: d.fuentesIndependientes >= u.fuentesIndepMinimasRojo,
+      definida: `${CONFIG} · nivel_maximo.fuentes_independientes_minimas · recuento en src/robot3/fuentes.ts`,
+    },
+    {
+      codigo: 'reputacion_minima',
+      regla: 'Reputacion media de los canales que hablan del token',
+      robot: 'Robot 2',
+      exige: `${u.reputacionMinimaRojo} o mas`,
+      valor: numero(d.reputacionMedia),
+      cumple: d.reputacionMedia >= u.reputacionMinimaRojo,
+      definida: `${CONFIG} · nivel_maximo.reputacion_minima · calculo en src/telegram/anticipacion.ts`,
+    },
+    {
+      codigo: 'anticipacion',
+      regla: 'La informacion aparecio antes del movimiento del precio',
+      robot: 'Robot 2',
+      exige: 'antes del movimiento',
+      valor: describirAnticipacion(d.anticipacionSeg),
+      cumple: puntuarAnticipacion(d.anticipacionSeg) > 0,
+      definida: `${CODIGO} · puntuarAnticipacion()`,
+    },
+    {
+      codigo: 'sin_contradicciones',
+      regla: 'La blockchain no desmiente lo que dicen los mensajes',
+      robot: 'Robot 1 y 2',
+      exige: 'ninguna contradiccion',
+      valor: d.contradicciones === 0 ? 'ninguna' : `${d.contradicciones} contradiccion(es)`,
+      cumple: d.contradicciones === 0,
+      definida: `src/robot3/coherencia.ts · verificarCoherencia() y ${CODIGO} · decidir()`,
+    },
+  ];
+}
+
+/** Reglas del nivel intermedio ("Convergencia"): interes alto con reservas. */
+export function reglasNivelIntermedio(d: DatosComparados, u: Umbrales): ReglaAplicada[] {
+  return [
+    ...reglasComunes(d),
+    {
+      codigo: 'tecnica_minima',
+      regla: 'Nota de oportunidad del Robot 1',
+      robot: 'Robot 1',
+      exige: `${u.tecnicaMinimaNaranja} o mas`,
+      valor: numero(d.tecnica),
+      cumple: d.tecnica >= u.tecnicaMinimaNaranja,
+      definida: `${CONFIG} · nivel_intermedio.tecnica_minima`,
+    },
+    {
+      codigo: 'riesgo_maximo',
+      regla: 'Nota de riesgo del Robot 1',
+      robot: 'Robot 1',
+      exige: `${u.riesgoMaximoNaranja} o menos`,
+      valor: numero(d.riesgo),
+      cumple: d.riesgo <= u.riesgoMaximoNaranja,
+      definida: `${CONFIG} · nivel_intermedio.riesgo_maximo`,
+    },
+    {
+      codigo: 'fuentes_independientes',
+      regla: 'Canales independientes con informacion util',
+      robot: 'Robot 2',
+      exige: '1 o mas',
+      valor: String(d.fuentesIndependientes),
+      cumple: d.fuentesIndependientes >= 1,
+      definida: `${CODIGO} · decidir()`,
+    },
+  ];
+}
+
 export interface Veredicto {
   nivel: Nivel;
   /** Componentes separadas. Nunca se funden en un numero unico. */
@@ -70,6 +226,8 @@ export interface Veredicto {
   explicacion: string[];
   /** Contradicciones detectadas entre las dos fuentes. */
   contradicciones: string[];
+  /** Cada regla de los dos niveles altos, con el valor que tenia el token. */
+  reglas: { maximo: ReglaAplicada[]; intermedio: ReglaAplicada[] };
 }
 
 /** Umbrales. Todos configurables: ninguno va fijo en el codigo de decision. */
@@ -160,8 +318,28 @@ export function decidir(
     evidencia: r2.afirmacionVerificada ? 100 : 0,
   };
 
+  // Las reglas se calculan siempre, tambien al descartar: el panel ensena
+  // cada una con su valor para que se vea en cual se quedo el token.
+  const reglasCon = (nContradicciones: number) => {
+    const datos: DatosComparados = {
+      tecnica: componentes.tecnica,
+      riesgo: componentes.riesgo,
+      vetado: r1.vetoed,
+      evaluable: r1.evaluable,
+      fuentesIndependientes: r2.fuentesIndependientes,
+      reputacionMedia: componentes.fuentes,
+      anticipacionSeg: r2.anticipacionSeg,
+      contradicciones: nContradicciones,
+    };
+    return { maximo: reglasNivelMaximo(datos, umbrales), intermedio: reglasNivelIntermedio(datos, umbrales) };
+  };
+
   // ---- 1. Vetos: por encima de todo lo demas --------------------------
   if (r1.vetoed) {
+    const contradiccionesVeto =
+      r2.fuentesIndependientes >= 2
+        ? ['Telegram lo presenta como oportunidad y los datos dicen que es una trampa.']
+        : [];
     return {
       nivel: 'descartado',
       componentes,
@@ -173,10 +351,8 @@ export function decidir(
             'un token del que no se puede salir no es una oportunidad.'
           : 'No se envia ninguna alerta.',
       ],
-      contradicciones:
-        r2.fuentesIndependientes >= 2
-          ? ['Telegram lo presenta como oportunidad y los datos dicen que es una trampa.']
-          : [],
+      contradicciones: contradiccionesVeto,
+      reglas: reglasCon(contradiccionesVeto.length),
     };
   }
 
@@ -191,6 +367,7 @@ export function decidir(
         'Cuando no se puede verificar, el sistema no afirma: se calla.',
       ],
       contradicciones: [],
+      reglas: reglasCon(0),
     };
   }
 
@@ -220,13 +397,10 @@ export function decidir(
   }
 
   // ---- 4. Nivel ---------------------------------------------------------
-  const cumpleRojo =
-    componentes.tecnica >= umbrales.tecnicaMinimaRojo &&
-    componentes.riesgo <= umbrales.riesgoMaximoRojo &&
-    r2.fuentesIndependientes >= umbrales.fuentesIndepMinimasRojo &&
-    componentes.fuentes >= umbrales.reputacionMinimaRojo &&
-    componentes.anticipacion > 0 &&
-    contradicciones.length === 0;
+  // Cada nivel se cumple si se cumplen TODAS sus reglas. Son las mismas que
+  // ensena el panel, asi que lo que se ve es exactamente lo que se aplico.
+  const reglas = reglasCon(contradicciones.length);
+  const cumpleRojo = reglas.maximo.every((r) => r.cumple);
 
   if (cumpleRojo) {
     explicacion.push(
@@ -245,13 +419,11 @@ export function decidir(
       motivo: 'Coincidencia fuerte entre informacion y datos objetivos',
       explicacion,
       contradicciones,
+      reglas,
     };
   }
 
-  const cumpleNaranja =
-    componentes.tecnica >= umbrales.tecnicaMinimaNaranja &&
-    componentes.riesgo <= umbrales.riesgoMaximoNaranja &&
-    r2.fuentesIndependientes >= 1;
+  const cumpleNaranja = reglas.intermedio.every((r) => r.cumple);
 
   if (cumpleNaranja) {
     explicacion.push(
@@ -264,6 +436,7 @@ export function decidir(
       motivo: 'Interes alto, con reservas',
       explicacion,
       contradicciones,
+      reglas,
     };
   }
 
@@ -277,5 +450,6 @@ export function decidir(
     motivo: 'Solo para observacion',
     explicacion,
     contradicciones,
+    reglas,
   };
 }

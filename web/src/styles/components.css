@@ -1045,3 +1045,62 @@
   width: 14px;
   height: 14px;
 }
+
+/* ---------- Bloque de codigo (SQL, rutas) ---------- */
+.codeblock {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-2);
+}
+
+/* ---------- Lista corta de reglas (tarjeta de veredicto) ---------- */
+.reglas-mini {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-sm);
+}
+.reglas-mini li {
+  display: grid;
+  grid-template-columns: 16px 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+}
+.reglas-mini li > svg {
+  align-self: center;
+}
+.reglas-mini li.is-ok > svg {
+  color: var(--good);
+}
+.reglas-mini li.is-ko > svg {
+  color: var(--critical);
+}
+.reglas-mini li.is-ko > span:first-of-type {
+  color: var(--text);
+  font-weight: 560;
+}
+.reglas-mini__valor {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 640px) {
+  .reglas-mini li {
+    grid-template-columns: 16px 1fr;
+  }
+  .reglas-mini__valor {
+    grid-column: 2;
+    text-align: left;
+  }
+}

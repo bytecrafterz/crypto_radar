@@ -72,7 +72,7 @@ const PRIORIDAD_TIPO = ['negativo', 'listing', 'lanzamiento', 'partnership', 'wh
 async function reunirSenalSocial(
   chain: string,
   address: string,
-): Promise<{ r2: EntradaRobot2; afirmaciones: Afirmacion[]; resumenes: ResumenMensaje[] } | null> {
+): Promise<{ r2: EntradaRobot2; afirmaciones: Afirmacion[]; resumenes: ResumenMensaje[]; canalesIndependientes: number[] } | null> {
   const menciones = await query<MencionFuente>(
     `SELECT me.channel_id AS canal, m.text_hash AS hash, m.id AS mensaje, m.posted_at AS publicado,
             -- Una promocion pagada NO es una fuente independiente por
@@ -176,6 +176,7 @@ async function reunirSenalSocial(
     },
     afirmaciones,
     resumenes,
+    canalesIndependientes: fuentes.autores,
   };
 }
 
@@ -430,7 +431,8 @@ async function evaluarToken(chain: Chain, address: string): Promise<void> {
 
   // Los umbrales salen de config/robot3.yaml y se recargan solos: cambiar
   // un numero ahi no exige reiniciar ni tocar codigo.
-  const veredicto = decidir(r1, r2, umbralesActuales());
+  const umbrales = umbralesActuales();
+  const veredicto = decidir(r1, r2, umbrales);
 
   const primeraMencion = primera?.ts ?? new Date();
 
@@ -460,12 +462,36 @@ async function evaluarToken(chain: Chain, address: string): Promise<void> {
 
   // Todo el razonamiento se guarda con el veredicto, se avise o no. Antes
   // solo viajaba en el aviso: de lo que no se avisaba no quedaba por que.
+  //
+  // Con las reglas aplicadas, los umbrales en vigor y los datos exactos que
+  // se compararon: si mas adelante cambia un umbral, el veredicto sigue
+  // diciendo con que reglas se tomo.
   const detalle = {
     motivo: veredicto.motivo,
     explicacion: veredicto.explicacion,
     contradicciones: veredicto.contradicciones,
     confirmaciones: coherencia.confirmadas,
     resumenes: social.resumenes,
+    reglas: veredicto.reglas,
+    umbrales,
+    datos: {
+      robot1: {
+        oportunidad: r1.opportunity,
+        riesgo: r1.risk,
+        vetado: r1.vetoed,
+        evaluable: r1.evaluable,
+        vetos: r1.vetos,
+      },
+      robot2: {
+        fuentesTotal: r2.fuentesTotal,
+        fuentesIndependientes: r2.fuentesIndependientes,
+        canalesIndependientes: social.canalesIndependientes,
+        reputacionMedia: r2.reputacionMedia,
+        anticipacionSeg: r2.anticipacionSeg,
+        tipoSenal: r2.tipoSenal,
+      },
+    },
+    evaluadoEn: new Date().toISOString(),
   };
 
   // Se guarda SIEMPRE, avise o no. Los descartados son justamente lo que

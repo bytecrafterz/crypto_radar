@@ -252,12 +252,14 @@ export async function datosTelegramToken(chain: string, address: string) {
   const menciones = await query<{
     canal: string | null; posted_at: Date; resumen_es: string | null; clasificacion: string | null;
     anticipacion_seg: number | null; anticipacion_veredicto: string | null; text: string | null;
+    reputacion: unknown;
   }>(
     `SELECT c.username AS canal, me.posted_at, m.resumen_es, m.clasificacion,
-            me.anticipacion_seg, me.anticipacion_veredicto, m.text
+            me.anticipacion_seg, me.anticipacion_veredicto, m.text, s.tasa_utiles AS reputacion
        FROM tg_mentions me
        JOIN tg_messages m ON m.id = me.message_id
        JOIN tg_channels c ON c.id = me.channel_id
+       LEFT JOIN tg_source_stats s ON s.channel_id = me.channel_id
       WHERE me.chain = $1 AND me.address = $2
       ORDER BY me.posted_at`,
     [chain, address],
@@ -292,7 +294,8 @@ export async function datosTelegramToken(chain: string, address: string) {
       canal: m.canal,
       postedAt: iso(m.posted_at),
       resumen: m.resumen_es,
-      texto: (m.text ?? '').slice(0, 200),
+      texto: (m.text ?? '').slice(0, 1200),
+      reputacion: num(m.reputacion),
       clase: m.clasificacion,
       anticipacionSeg: num(m.anticipacion_seg),
       veredicto: m.anticipacion_veredicto,

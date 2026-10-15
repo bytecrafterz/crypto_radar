@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useEffect, type ReactNode } from 'react';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, Send, ShoppingCart } from 'lucide-react';
 import { useApi } from '../api/hooks';
 import { ApiError } from '../api/client';
@@ -17,6 +17,8 @@ import { DataTable } from '../components/ui/DataTable';
 import { ChartCard } from '../components/charts/ChartCard';
 import { ReasonList } from '../components/domain/ReasonList';
 import { Anticipation } from '../components/domain/Anticipation';
+import { DecisionRobot3 } from '../components/domain/DecisionRobot3';
+import { Disclosure } from '../components/ui/Disclosure';
 import { iniciales } from '../components/domain/TokenCell';
 import {
   BoolBadge, ChainBadge, LevelBadge, MessageClassBadge, OpportunityBadge, RiskBadge, TokenStatusBadge,
@@ -69,6 +71,13 @@ export default function TokenDetalle() {
     refrescoMs: 60_000,
   });
   useTitulo(q.data?.token.symbol ?? 'Token');
+
+  // Enlaces directos a una seccion (#decision-robot3 desde Convergencia).
+  const { hash } = useLocation();
+  const hayDatos = Boolean(q.data);
+  useEffect(() => {
+    if (hayDatos && hash) document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [hayDatos, hash]);
 
   const volver = (
     <Link to="/tokens" className="row small" style={{ marginBottom: 16, color: 'var(--text-2)' }}>
@@ -181,6 +190,51 @@ export default function TokenDetalle() {
         </Card>
       </div>
 
+      {s && (
+        <div className="grid grid--2" style={{ marginTop: 16 }}>
+          <Card title="Como sale la nota" sub="Calculo del Robot 1 (src/scoring/engine.ts, reglas en config/scoring.yaml)">
+            <KeyValue
+              items={[
+                ['Puntos a favor', `${fmtNum(s.calculo.sumaAFavor)} de ${fmtNum(s.calculo.maximoPosible)} posibles`],
+                ['Oportunidad antes de ajustes', `${fmtNum(s.calculo.sumaAFavor)} / ${fmtNum(s.calculo.maximoPosible)} x 100 = ${String(s.calculo.oportunidadBase).replace('.', ',')}`],
+                s.calculo.ajuste !== 0 && ['Ajuste por riesgo alto o mercado', String(s.calculo.ajuste).replace('.', ',')],
+                ['Oportunidad final', <b key="o">{String(s.calculo.oportunidad).replace('.', ',')}</b>],
+                ['Riesgo', <b key="r">{`${String(s.calculo.sumaRiesgo).replace('.', ',')} puntos en contra (maximo 100; desde ${s.calculo.vetoRiesgo} veta)`}</b>],
+              ]}
+            />
+            <p className="dim xs" style={{ margin: '10px 0 0' }}>
+              La oportunidad es la suma de los puntos a favor sobre el maximo posible. Un riesgo de 50 o mas la rebaja, y el
+              contexto del mercado general la ajusta un poco. El riesgo es la suma directa de los puntos en contra.
+            </p>
+          </Card>
+          <Card title="De donde sale cada dato" flush>
+            <DataTable
+              compact
+              columns={[
+                {
+                  key: 'dato',
+                  header: 'Dato',
+                  cell: (o) => (
+                    <div className="stack" style={{ gap: 2 }}>
+                      <span className="small">{o.dato}</span>
+                      <span className="dim xs">{o.fuente}</span>
+                      {o.enlace && (
+                        <a className="xs" href={o.enlace} target="_blank" rel="noopener noreferrer">
+                          ver la transaccion en la blockchain
+                        </a>
+                      )}
+                    </div>
+                  ),
+                },
+                { key: 'hora', header: 'Hora', cell: (o) => <span className="nowrap small">{fmtDate(o.hora)}</span> },
+              ]}
+              rows={q.data.origen}
+              rowKey={(o) => o.dato}
+            />
+          </Card>
+        </div>
+      )}
+
       {tg && (
         <Section title="Telegram y Robot 3" sub="Lo que se dijo de este token en Telegram, resumido en espanol, y el veredicto del Robot 3.">
           <Card>
@@ -225,20 +279,45 @@ export default function TokenDetalle() {
                   header: 'Lo que dice (en espanol)',
                   cell: (m) => (
                     <div className="stack" style={{ gap: 4, alignItems: 'flex-start' }}>
-                      <span className={m.resumen ? 'small' : 'small dim'}>{m.resumen ?? m.texto}</span>
+                      <span className={m.resumen ? 'small' : 'small dim'}>{m.resumen ?? m.texto.slice(0, 220)}</span>
                       {m.clase && <MessageClassBadge clase={m.clase} />}
+                      {(m.resumen || m.texto.length > 220) && (
+                        <Disclosure summary="Mensaje original">
+                          <span className="small dim" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                            {m.texto}
+                          </span>
+                        </Disclosure>
+                      )}
                     </div>
                   ),
                 },
                 { key: 'canal', header: 'Canal', cell: (m) => <span className="small">@{m.canal ?? '?'}</span> },
+                {
+                  key: 'hora',
+                  header: 'Hora',
+                  hideOnMobile: true,
+                  cell: (m) => <span className="small nowrap">{fmtDate(m.postedAt)}</span>,
+                },
+                {
+                  key: 'rep',
+                  header: 'Reputacion del canal',
+                  align: 'right',
+                  cell: (m) => (m.reputacion === null ? <span className="dim small">sin historial</span> : <b>{fmtNum(m.reputacion)}</b>),
+                },
                 { key: 'ant', header: 'Anticipacion', cell: (m) => <Anticipation seg={m.anticipacionSeg} veredicto={m.veredicto} /> },
               ]}
               rows={tg.menciones}
               rowKey={(_, i) => i}
             />
+            <p className="dim xs" style={{ margin: '10px 0 0' }}>
+              Reputacion del canal: porcentaje de sus menciones medidas que aparecieron antes de que el precio subiera un 25 % en
+              las 24 horas siguientes. Sale de su historial real y se recalcula sola cada 30 minutos.
+            </p>
           </Card>
         </Section>
       )}
+
+      {q.data.decision && <DecisionRobot3 d={q.data.decision} />}
 
       <Section
         title="Evolucion"

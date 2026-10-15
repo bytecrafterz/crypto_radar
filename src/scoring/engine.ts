@@ -86,7 +86,7 @@ const numProp = (r: RuleConfig, key: string, fallback: number): number => {
 };
 
 /** Puntos maximos que puede sumar la oportunidad con las reglas activas. */
-function maxOpportunityPoints(rules: Record<string, RuleConfig>): number {
+export function maxOpportunityPoints(rules: Record<string, RuleConfig>): number {
   let total = 0;
   for (const r of Object.values(rules)) {
     if (r?.enabled === false) continue;

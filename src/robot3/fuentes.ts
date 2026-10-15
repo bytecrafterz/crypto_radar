@@ -34,6 +34,8 @@ export interface RecuentoFuentes {
   total: number;
   /** Canales que publicaron por su cuenta algo util. */
   independientes: number;
+  /** Cuales son esos canales, para poder ensenarlos. */
+  autores: number[];
 }
 
 export function contarFuentes(menciones: MencionFuente[]): RecuentoFuentes {
@@ -63,5 +65,5 @@ export function contarFuentes(menciones: MencionFuente[]): RecuentoFuentes {
     if (util) autores.add(autor.canal);
   }
 
-  return { total: canales.size, independientes: autores.size };
+  return { total: canales.size, independientes: autores.size, autores: [...autores].sort((a, b) => a - b) };
 }

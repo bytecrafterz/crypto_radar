@@ -195,7 +195,7 @@ export default function Telegram() {
         <Card
           flush
           title="Fuentes"
-          sub="Lo que importa no es cuantos tokens menciona un canal, sino cuantas veces llego antes del movimiento."
+          sub="Reputacion de cada canal = de sus menciones que se pudieron medir, el porcentaje que aparecio antes de que el precio subiera un 25 % en las 24 horas siguientes. Es la reputacion que usa el Robot 3 (media de los canales que hablan de un token, minimo 50 para Convergencia fuerte). Se calcula sola con resultados reales: src/telegram/anticipacion.ts."
         >
           <DataTable<ListaFuentes['items'][number]>
             columns={[
@@ -225,7 +225,7 @@ export default function Telegram() {
               },
               {
                 key: 'ac',
-                header: 'Acierto',
+                header: 'Reputacion',
                 align: 'right',
                 cell: (f) =>
                   f.acierto === null ? (

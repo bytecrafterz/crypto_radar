@@ -122,9 +122,24 @@ async function persistUsage(): Promise<void> {
   }
 }
 
+/**
+ * Que robots arranca este proceso, segun ROBOTS ("1,2,3" por defecto).
+ * Permite ejecutar cada robot por separado; comparten la base de datos, asi
+ * que el Robot 3 cruza lo que hayan guardado los otros dos aunque corran en
+ * otro proceso.
+ */
+export function robotsActivos(valor = env.robots): Set<number> {
+  const set = new Set(
+    valor.split(',').map((x) => Number(x.trim())).filter((n) => n === 1 || n === 2 || n === 3),
+  );
+  return set.size > 0 ? set : new Set([1, 2, 3]);
+}
+
 export async function startWorker(): Promise<void> {
   if (running) return;
   running = true;
+  const robots = robotsActivos();
+  log.info({ robots: [...robots] }, 'robots que arranca este proceso');
 
   const problems = validateConfig();
   for (const p of problems) log.warn(p);
@@ -136,9 +151,12 @@ export async function startWorker(): Promise<void> {
 
   const filters = getFilters();
 
-  loop('deteccion', () => getFilters().discovery.interval_seconds * 1000, runDiscovery);
-  loop('analisis', () => 60_000, runEnrichment);
-  loop('seguimiento', () => getFilters().monitoring.interval_minutes * 60_000, runMonitor);
+  // --- Robot 1: deteccion, analisis y seguimiento ------------------------
+  if (robots.has(1)) {
+    loop('deteccion', () => getFilters().discovery.interval_seconds * 1000, runDiscovery);
+    loop('analisis', () => 60_000, runEnrichment);
+    loop('seguimiento', () => getFilters().monitoring.interval_minutes * 60_000, runMonitor);
+  }
   loop('consumo', () => 300_000, persistUsage);
 
   // Vigilante: comprueba que ningun bucle se haya quedado callado. Va el
@@ -159,6 +177,23 @@ export async function startWorker(): Promise<void> {
   // Robot 3 se quedaba sin materia prima. Una pieza que aporta el 0,1% no
   // puede tumbar al resto, asi que ahora cada una mira solo lo suyo.
 
+  if (robots.has(2)) await arrancarRobot2();
+
+  // --- Robot 3: convergencia entre los dos radares -----------------------
+  // Cruza lo que dice la calle (Robot 2) con lo que dicen los datos de la
+  // cadena (Robot 1). No suma las dos cosas en una nota unica: un token
+  // con mucho ruido social y un contrato peligroso no es "medio bueno",
+  // es descartado, y por eso los vetos mandan sobre todo lo demas.
+  //
+  // Cada 5 minutos, no cada 30 segundos: juzgar un token que el Robot 1
+  // todavia no ha terminado de analizar solo produce veredictos en falso.
+  if (robots.has(3)) loop('robot3-convergencia', () => 5 * 60_000, runRobot3);
+
+  await arrancado(filters);
+}
+
+/** Robot 2: radar de informacion en Telegram. */
+async function arrancarRobot2(): Promise<void> {
   // --- Lectura por bot: solo donde se le haya invitado -------------------
   if (process.env.TELEGRAM_RADAR_TOKEN) {
     const bot = await comprobarBot();
@@ -220,16 +255,9 @@ export async function startWorker(): Promise<void> {
     log.info('sin modelo de lenguaje: el triaje se queda en las reglas gratuitas');
   }
 
-  // --- Robot 3: convergencia entre los dos radares -----------------------
-  // Cruza lo que dice la calle (Robot 2) con lo que dicen los datos de la
-  // cadena (Robot 1). No suma las dos cosas en una nota unica: un token
-  // con mucho ruido social y un contrato peligroso no es "medio bueno",
-  // es descartado, y por eso los vetos mandan sobre todo lo demas.
-  //
-  // Cada 5 minutos, no cada 30 segundos: juzgar un token que el Robot 1
-  // todavia no ha terminado de analizar solo produce veredictos en falso.
-  loop('robot3-convergencia', () => 5 * 60_000, runRobot3);
+}
 
+async function arrancado(filters: ReturnType<typeof getFilters>): Promise<void> {
   log.info(
     {
       cadenas: filters.discovery.chains,

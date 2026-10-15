@@ -116,6 +116,12 @@ export const env = {
   host: str('HOST', '0.0.0.0'),
 
   workerEnabled: bool('WORKER_ENABLED', true),
+  // Que robots arranca este proceso: "1,2,3" (todos, lo normal), o solo
+  // alguno para ejecutarlos por separado. Ver docs/es/entrega-tecnica.
+  robots: str('ROBOTS', '1,2,3'),
+  // Sin panel en este proceso (para un segundo proceso que solo ejecuta
+  // robots, sin pelearse por el puerto).
+  webEnabled: bool('WEB_ENABLED', true),
 };
 
 /** Comprobaciones al arrancar: avisa de lo que falta pero no impide arrancar. */

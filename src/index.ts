@@ -20,7 +20,8 @@ async function main(): Promise<void> {
   await waitForDb(90);
   await runMigrations();
 
-  const app = await startWeb();
+  const app = env.webEnabled ? await startWeb() : null;
+  if (!app) log.info('WEB_ENABLED=false: este proceso no abre el panel');
 
   if (env.workerEnabled) {
     await startWorker();
@@ -32,7 +33,7 @@ async function main(): Promise<void> {
     log.info({ signal }, 'cerrando');
     try {
       await stopWorker();
-      await app.close();
+      await app?.close();
       await logActivity('info', 'sistema', `Sistema detenido (${signal}).`).catch(() => {});
       await closeDb();
     } catch (err) {

@@ -168,3 +168,40 @@ test('la anticipacion se dice igual en todo el aviso, tambien cuando es casi cer
   const v = decidir(R1_BUENO, { ...R2_FUERTE, anticipacionSeg: 20 });
   assert.ok(v.explicacion.includes('La informacion aparecio menos de 1 min antes del movimiento.'));
 });
+
+// --------------------------------------------------------------------------
+//  Reglas aplicadas: lo que ensena el panel es lo que se decidio
+// --------------------------------------------------------------------------
+
+test('convergencia fuerte: el panel ensena todas las reglas cumplidas', () => {
+  const v = decidir(R1_BUENO, R2_FUERTE);
+  assert.equal(v.nivel, 'rojo');
+  assert.ok(v.reglas.maximo.length >= 8);
+  assert.ok(v.reglas.maximo.every((r) => r.cumple), 'con nivel maximo no puede salir ninguna regla incumplida');
+});
+
+test('si no llega al nivel maximo, la tabla dice exactamente que regla fallo', () => {
+  const v = decidir({ ...R1_BUENO, risk: 52 }, R2_FUERTE);
+  assert.notEqual(v.nivel, 'rojo');
+  const fallan = v.reglas.maximo.filter((r) => !r.cumple).map((r) => r.codigo);
+  assert.deepEqual(fallan, ['riesgo_maximo']);
+  const riesgo = v.reglas.maximo.find((r) => r.codigo === 'riesgo_maximo')!;
+  assert.equal(riesgo.valor, '52');
+  assert.equal(riesgo.exige, '40 o menos');
+});
+
+test('el veto sale como regla incumplida, y la promocion de un token vetado como contradiccion', () => {
+  const v = decidir({ ...R1_BUENO, vetoed: true, vetos: ['honeypot'] }, R2_FUERTE);
+  assert.equal(v.nivel, 'descartado');
+  assert.deepEqual(
+    v.reglas.maximo.filter((r) => !r.cumple).map((r) => r.codigo),
+    ['sin_veto', 'sin_contradicciones'],
+  );
+});
+
+test('cada regla dice donde esta definida, para seguirla hasta el codigo', () => {
+  const v = decidir(R1_BUENO, R2_FUERTE);
+  for (const r of [...v.reglas.maximo, ...v.reglas.intermedio]) {
+    assert.match(r.definida, /^(config|src)\//, `${r.codigo} sin ubicacion`);
+  }
+});
