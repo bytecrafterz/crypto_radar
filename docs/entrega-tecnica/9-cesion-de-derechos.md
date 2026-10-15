@@ -1,8 +1,8 @@
 # Cesion de derechos sobre el codigo
 
-**Desarrollador:** [nombre completo del desarrollador]
+**Desarrollador:** ______________________________________
 
-**Cliente:** [nombre completo de la clienta]
+**Cliente:** ______________________________________
 
 **Proyecto:** Crypto Radar, encargado a traves de Workana: Robot 1 (busqueda general de tokens),
 Robot 2 (analisis de Telegram), Robot 3 (comparacion y seleccion), panel web, servidor e
