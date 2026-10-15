@@ -153,6 +153,10 @@ export function DecisionRobot3({ d }: { d: Decision }) {
         </div>
 
         <Card title="Canales que aportaron informacion" sub="Primera mencion de cada canal, con el mensaje original." flush>
+          <p className="dim xs" style={{ margin: '0 20px 8px' }}>
+            La reputacion de cada canal es la de hoy: se recalcula con cada resultado nuevo. La media que uso el Robot 3 en el
+            momento de la decision fue {decimal(d.robot2.reputacionMedia)}.
+          </p>
           {d.robot2.independientesRecalculados && (
             <p className="dim xs" style={{ margin: '0 20px 8px' }}>
               Que canales cuentan como independientes se ha recalculado con la misma funcion del Robot 3 (src/robot3/fuentes.ts)
@@ -188,7 +192,7 @@ export function DecisionRobot3({ d }: { d: Decision }) {
               },
               {
                 key: 'rep',
-                header: 'Reputacion',
+                header: 'Reputacion hoy',
                 align: 'right',
                 cell: (m) =>
                   m.reputacion === null ? (
