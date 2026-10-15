@@ -58,7 +58,7 @@ Es la lista de la seccion 5 de la peticion, con donde se comprueba cada punto:
 |---|---|
 | Codigo fuente completo, dependencias y versiones | Este repositorio; `package.json` y `package-lock.json` fijan cada version |
 | Fuentes y datos de cada robot | Documentos 1, 2 y 3, apartado "Fuentes" |
-| Bases de datos | Documento 4 y `anexos/esquema.sql`; la copia completa de la base de datos se entrega aparte |
+| Bases de datos | Documento 4 y `anexos/esquema.sql`; la copia completa de la base de datos se hace cada noche en el servidor |
 | Reglas con su ubicacion | Documentos 1, 2 y 3, apartado "Reglas"; en el panel, cada regla del Robot 3 dice donde esta definida |
 | Instrucciones de ejecucion y registros | Documento 5 |
 | Consultar cada robot por separado | Panel: Tokens y Alertas (Robot 1), Telegram (Robot 2), Convergencia (Robot 3); tarjetas de estado en la portada; comando `/robots` en Telegram |
