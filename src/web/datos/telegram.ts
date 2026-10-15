@@ -95,6 +95,7 @@ export async function datosFuentes(q: Record<string, string | undefined>): Promi
 
 export async function datosMenciones(q: Record<string, string | undefined>) {
   const { page, size, offset } = paginacion(q, 20);
+  const hoy = q.periodo === 'hoy';
   const [filas, total] = await Promise.all([
     query<{
       symbol: string | null; chain: string; address: string; canal: string | null; posted_at: Date;
@@ -112,11 +113,15 @@ export async function datosMenciones(q: Record<string, string | undefined>) {
          JOIN tg_channels c ON c.id = me.channel_id
          JOIN tg_messages m ON m.id = me.message_id
          LEFT JOIN tokens t ON t.chain = me.chain AND t.address = me.address
+        WHERE (NOT $3::boolean OR me.posted_at >= CURRENT_DATE)
         ORDER BY me.posted_at DESC, me.id DESC
         LIMIT $1 OFFSET $2`,
-      [size, offset],
+      [size, offset, hoy],
     ),
-    queryOne<{ n: number }>('SELECT COUNT(*)::int AS n FROM tg_mentions'),
+    queryOne<{ n: number }>(
+      'SELECT COUNT(*)::int AS n FROM tg_mentions WHERE (NOT $1::boolean OR posted_at >= CURRENT_DATE)',
+      [hoy],
+    ),
   ]);
   return {
     items: filas.map((m) => ({

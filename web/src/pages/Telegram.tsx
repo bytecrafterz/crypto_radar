@@ -18,7 +18,7 @@ import { fmtDate, fmtNum, timeAgo } from '../lib/format';
 import { ESTADOS_CANAL } from '../lib/labels';
 
 type Vista = 'menciones' | 'mensajes' | 'fuentes' | 'canales';
-const CLAVES = ['vista', 'clase', 'estado'] as const;
+const CLAVES = ['vista', 'clase', 'estado', 'periodo'] as const;
 
 /** Paginacion comun de las cuatro listas. */
 function Paginas({ total, page, size, loading, cambiar }: {
@@ -48,7 +48,7 @@ export default function Telegram() {
   const r = resumen.data;
 
   // Cada pestana pide sus datos solo cuando se abre.
-  const menciones = useApi<ListaMenciones>(vista === 'menciones' ? conParams('/api/panel/telegram/menciones', { page, size }) : null, { mantenerAnterior: true });
+  const menciones = useApi<ListaMenciones>(vista === 'menciones' ? conParams('/api/panel/telegram/menciones', { page, size, periodo: valores.periodo }) : null, { mantenerAnterior: true });
   const mensajes = useApi<ListaMensajes>(vista === 'mensajes' ? conParams('/api/panel/telegram/mensajes', { page, size, clase: valores.clase }) : null, { mantenerAnterior: true });
   const fuentes = useApi<ListaFuentes>(vista === 'fuentes' ? conParams('/api/panel/telegram/fuentes', { page, size, estado: valores.estado }) : null, { mantenerAnterior: true });
   const canales = useApi<ListaDescubiertos>(vista === 'canales' ? conParams('/api/panel/telegram/descubiertos', { page, size, estado: valores.estado }) : null, { mantenerAnterior: true });
@@ -120,7 +120,19 @@ export default function Telegram() {
       </div>
 
       {vista === 'menciones' && (
-        <Card flush title="Tokens detectados en Telegram" sub="Cada mencion con lo que dice el mensaje y si se adelanto al movimiento del precio.">
+        <Card
+          flush
+          title="Tokens detectados en Telegram"
+          sub="Cada mencion con lo que dice el mensaje y si se adelanto al movimiento del precio."
+          actions={
+            <Segmented
+              label="Periodo"
+              value={valores.periodo || 'todo'}
+              onChange={(v) => cambiar({ periodo: v === 'todo' ? '' : v })}
+              options={[{ value: 'hoy', label: 'Hoy' }, { value: 'todo', label: 'Todo' }]}
+            />
+          }
+        >
           <DataTable<ListaMenciones['items'][number]>
             columns={[
               {

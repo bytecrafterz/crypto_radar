@@ -27,7 +27,7 @@ const columnas: Array<Column<TokenFila>> = [
   { key: 'fecha', header: 'Detectado', cell: (t) => <span className="dim small nowrap">{fmtDate(t.firstSeen)}</span>, hideOnMobile: true },
 ];
 
-const CLAVES = ['q', 'chain', 'status', 'minop', 'maxrisk', 'orden'] as const;
+const CLAVES = ['q', 'chain', 'status', 'minop', 'maxrisk', 'orden', 'periodo'] as const;
 
 export default function Tokens() {
   const navegar = useNavigate();
@@ -58,6 +58,9 @@ export default function Tokens() {
         <Field label="Buscar" grow>
           <Input type="search" placeholder="Simbolo, nombre o direccion" value={texto} onChange={(e) => setTexto(e.target.value)} />
         </Field>
+        <Field label="Periodo">
+          <Select value={valores.periodo} onChange={(e) => cambiar({ periodo: e.target.value })} options={[['', 'Todo'], ['hoy', 'Analizados hoy']]} />
+        </Field>
         <Field label="Cadena">
           <Select value={valores.chain} onChange={(e) => cambiar({ chain: e.target.value })} options={[['', 'Todas'], ['solana', 'Solana'], ['base', 'Base']]} />
         </Field>
@@ -82,7 +85,7 @@ export default function Tokens() {
           />
         </Field>
         {hayFiltros && (
-          <Button variant="ghost" icon={<RotateCcw />} onClick={() => cambiar({ q: '', chain: '', status: '', minop: '', maxrisk: '', orden: '' })}>
+          <Button variant="ghost" icon={<RotateCcw />} onClick={() => cambiar({ q: '', chain: '', status: '', minop: '', maxrisk: '', orden: '', periodo: '' })}>
             Limpiar
           </Button>
         )}

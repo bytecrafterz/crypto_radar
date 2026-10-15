@@ -814,12 +814,19 @@ export interface TokenListFilters {
    * de septiembre ya archivados, con la nota que tuvieron entonces.
    */
   active?: boolean;
+  /** Solo los analizados a fondo hoy (dia natural del servidor). */
+  analyzedToday?: boolean;
   limit?: number;
   offset?: number;
   orderBy?: 'reciente' | 'oportunidad' | 'riesgo' | 'liquidez';
 }
 
-export async function listTokens(f: TokenListFilters = {}): Promise<StoredToken[]> {
+/**
+ * Condiciones de los filtros del listado. Las comparten el listado y el
+ * recuento: antes el recuento solo miraba cadena y estado, y con una busqueda
+ * o una nota minima el panel decia "N tokens" con el total sin filtrar.
+ */
+function filtrosTokens(f: TokenListFilters): { where: string[]; params: unknown[] } {
   const where: string[] = [];
   const params: unknown[] = [];
   const add = (clause: string, value: unknown) => {
@@ -829,15 +836,21 @@ export async function listTokens(f: TokenListFilters = {}): Promise<StoredToken[
 
   if (f.chain) add('chain = ?', f.chain);
   if (f.status) add('status = ?', f.status);
-  if (f.minOpportunity !== undefined) add('last_opportunity >= ?', f.minOpportunity);
-  if (f.maxRisk !== undefined) add('last_risk <= ?', f.maxRisk);
+  if (f.minOpportunity !== undefined && Number.isFinite(f.minOpportunity)) add('last_opportunity >= ?', f.minOpportunity);
+  if (f.maxRisk !== undefined && Number.isFinite(f.maxRisk)) add('last_risk <= ?', f.maxRisk);
   if (f.onlyAlerted) where.push('alerted_at IS NOT NULL');
   if (f.since) add('first_seen >= ?', f.since);
   if (f.active) where.push(`status NOT IN ('descartado', 'archivado', 'peligro')`);
+  if (f.analyzedToday) where.push('enriched_at >= CURRENT_DATE');
   if (f.search) {
     params.push(`%${f.search}%`);
     where.push(`(symbol ILIKE $${params.length} OR name ILIKE $${params.length} OR address ILIKE $${params.length})`);
   }
+  return { where, params };
+}
+
+export async function listTokens(f: TokenListFilters = {}): Promise<StoredToken[]> {
+  const { where, params } = filtrosTokens(f);
 
   const order =
     f.orderBy === 'oportunidad'
@@ -863,17 +876,7 @@ export async function listTokens(f: TokenListFilters = {}): Promise<StoredToken[
 }
 
 export async function countTokens(f: TokenListFilters = {}): Promise<number> {
-  const where: string[] = [];
-  const params: unknown[] = [];
-  if (f.chain) {
-    params.push(f.chain);
-    where.push(`chain = $${params.length}`);
-  }
-  if (f.status) {
-    params.push(f.status);
-    where.push(`status = $${params.length}`);
-  }
-  if (f.onlyAlerted) where.push('alerted_at IS NOT NULL');
+  const { where, params } = filtrosTokens(f);
 
   const row = await queryOne<{ count: number }>(
     `SELECT COUNT(*)::int AS count FROM tokens ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}`,

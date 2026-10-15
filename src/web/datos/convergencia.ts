@@ -7,6 +7,7 @@
  * descarte con mucho ruido, y hay que poder distinguirlo.
  */
 import { reglasDeVeredicto } from './decision.js';
+import { R3_HOY } from '../../worker/robots.js';
 import type { ReglaAplicada } from '../../robot3/convergencia.js';
 import { query, queryOne } from '../../core/db.js';
 import { umbralesActuales } from '../../robot3/umbrales.js';
@@ -33,6 +34,8 @@ export async function datosConvergenciaResumen() {
 export async function datosVeredictos(q: Record<string, string | undefined>) {
   const { page, size, offset } = paginacion(q, 12);
   const nivel = NIVELES.includes(q.nivel ?? '') ? q.nivel! : null;
+  // "hoy": tokens que el Robot 3 cruzo hoy (veredicto nuevo o cambio de nivel).
+  const hoy = q.periodo === 'hoy';
   const [filas, total] = await Promise.all([
     query<{
       chain: string; address: string; symbol: string | null; nivel: string;
@@ -64,12 +67,17 @@ export async function datosVeredictos(q: Record<string, string | undefined>) {
          FROM tg_candidatos c
          LEFT JOIN tokens t ON t.chain = c.chain AND t.address = c.address
         WHERE ($3::text IS NULL OR c.nivel = $3)
+          AND (NOT $4::boolean OR ${R3_HOY})
         ORDER BY CASE c.nivel WHEN 'rojo' THEN 0 WHEN 'naranja' THEN 1 WHEN 'amarillo' THEN 2 ELSE 3 END,
                  c.creado_at DESC, c.id DESC
         LIMIT $1 OFFSET $2`,
-      [size, offset, nivel],
+      [size, offset, nivel, hoy],
     ),
-    queryOne<{ n: number }>('SELECT COUNT(*)::int AS n FROM tg_candidatos WHERE ($1::text IS NULL OR nivel = $1)', [nivel]),
+    queryOne<{ n: number }>(
+      `SELECT COUNT(*)::int AS n FROM tg_candidatos c
+        WHERE ($1::text IS NULL OR c.nivel = $1) AND (NOT $2::boolean OR ${R3_HOY})`,
+      [nivel, hoy],
+    ),
   ]);
 
   return {

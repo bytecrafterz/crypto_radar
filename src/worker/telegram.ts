@@ -9,7 +9,7 @@ import { getFilters, getScoring } from '../core/config.js';
 import { getState, setState } from '../core/db.js';
 import * as repo from '../core/repo.js';
 import { getUsage } from '../core/http.js';
-import { resumenRobots } from './robots.js';
+import { resumenRobots, tokensDeHoy, type ResumenRobot } from './robots.js';
 import { describirTiempo } from './vigilante.js';
 import { fmtUsd, fmtNum, escapeHtml, shortAddr } from '../core/util.js';
 
@@ -102,6 +102,7 @@ function registerCommands(b: Bot): void {
         '',
         'Comandos disponibles:',
         '/robots - si cada robot funciona y que ha sacado hoy',
+        '/robot1, /robot2, /robot3 - los tokens de hoy de cada robot',
         '/hoy - los tokens que te he enviado hoy',
         '/top - mejores oportunidades de las ultimas 24 horas',
         '/estado - como va el sistema',
@@ -121,7 +122,8 @@ function registerCommands(b: Bot): void {
       [
         '<b>Como usar el radar</b>',
         '',
-        '<b>/robots</b> - estado de los 3 robots y sus cifras de hoy.',
+        '<b>/robots</b> - estado de los 3 robots, sus cifras y sus tokens de hoy.',
+        '<b>/robot1</b>, <b>/robot2</b>, <b>/robot3</b> - la lista de tokens de hoy de cada robot, con su enlace.',
         '<b>/hoy</b> - los tokens de los que te he avisado hoy, con su enlace.',
         '<b>/top</b> - los 5 tokens con mejor nota de las ultimas 24 horas que siguen en juego.',
         '<b>/estado</b> - tokens detectados, analizados y vigilados hoy.',
@@ -169,11 +171,38 @@ function registerCommands(b: Bot): void {
       lines.push(`${icono[r.estado]} <b>${escapeHtml(r.nombre)}</b>: ${texto[r.estado]}${vuelta}`);
       if (r.paradas.length > 0) lines.push(`   Sin dar senales: ${escapeHtml(r.paradas.join(', '))}`);
       lines.push(`   ${r.cifras.map((c) => `${escapeHtml(c.etiqueta)}: <b>${fmtNum(c.valor)}</b>`).join(' · ')}`);
+      // Cuales son, no solo cuantos.
+      if (r.tokens.length > 0) {
+        lines.push(`   Hoy: ${r.tokens.map((t) => `<b>${escapeHtml(t.symbol ?? '?')}</b> (${escapeHtml(t.etiqueta)})`).join(', ')}`);
+      } else {
+        lines.push('   Hoy todavia no hay ninguno.');
+      }
+      lines.push(`   Lista completa: /${r.id}`);
       if (r.nota) lines.push(`   <i>${escapeHtml(r.nota)}</i>`);
       lines.push('');
     }
     await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' });
   });
+
+  // La lista de hoy de cada robot, con su enlace: cuales son, no solo cuantos.
+  const TITULOS: Record<ResumenRobot['id'], string> = {
+    robot1: 'Robot 1 · tokens analizados hoy (mejor nota primero)',
+    robot2: 'Robot 2 · tokens mencionados hoy en Telegram',
+    robot3: 'Robot 3 · tokens cruzados hoy (nivel mas alto primero)',
+  };
+  for (const id of ['robot1', 'robot2', 'robot3'] as const) {
+    b.command(id, async (ctx) => {
+      const tokens = await tokensDeHoy(id, 15);
+      const lines = [`<b>${TITULOS[id]}</b>`, ''];
+      if (tokens.length === 0) lines.push('Hoy todavia no hay ninguno.');
+      for (const t of tokens) {
+        lines.push(`• <b>${escapeHtml(t.symbol ?? '?')}</b> (${CADENA[t.chain] ?? t.chain}) · ${escapeHtml(t.etiqueta)}`);
+        lines.push(`   ${escapeHtml(t.detalle)}`);
+        lines.push(`   <a href="${enlaceDex(t.chain, t.address, null)}">DexScreener</a> · <code>${escapeHtml(t.address)}</code>`);
+      }
+      await ctx.reply(lines.join('\n'), { parse_mode: 'HTML', link_preview_options: { is_disabled: true } });
+    });
+  }
 
   b.command('hoy', async (ctx) => {
     const [stats, alertas] = await Promise.all([repo.getDashboardStats(), repo.listAlertsToday(15)]);
@@ -317,6 +346,9 @@ export async function startTelegram(escuchar = true): Promise<void> {
   try {
     await bot.api.setMyCommands([
       { command: 'robots', description: 'Estado de los 3 robots' },
+      { command: 'robot1', description: 'Tokens analizados hoy' },
+      { command: 'robot2', description: 'Tokens mencionados hoy en Telegram' },
+      { command: 'robot3', description: 'Tokens cruzados hoy por el Robot 3' },
       { command: 'hoy', description: 'Tokens de hoy' },
       { command: 'top', description: 'Mejores de las ultimas 24 horas' },
       { command: 'estado', description: 'Como va el sistema' },

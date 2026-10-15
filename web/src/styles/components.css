@@ -1097,3 +1097,45 @@
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------- Lista de tokens de hoy en la tarjeta de robot ---------- */
+.robot-card__lista {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.robot-card__lista-titulo {
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+.robot-card__lista ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.robot-card__lista li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
+  row-gap: 1px;
+  align-items: center;
+}
+.robot-card__token {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.robot-card__detalle {
+  grid-column: 1 / -1;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}

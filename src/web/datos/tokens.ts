@@ -18,6 +18,7 @@ export async function datosTokens(q: Record<string, string | undefined>): Promis
     search: q.q?.trim() || undefined,
     minOpportunity: q.minop ? Number(q.minop) : undefined,
     maxRisk: q.maxrisk ? Number(q.maxrisk) : undefined,
+    analyzedToday: q.periodo === 'hoy',
     orderBy: orden,
     limit: size,
     offset,

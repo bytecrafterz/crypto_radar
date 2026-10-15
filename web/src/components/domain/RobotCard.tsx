@@ -47,6 +47,30 @@ export function RobotCard({ robot }: { robot: ResumenRobot }) {
         ))}
       </dl>
 
+      <div className="robot-card__lista">
+        <div className="robot-card__lista-titulo">Cuales son (hoy)</div>
+        {robot.tokens.length === 0 ? (
+          <p className="dim small" style={{ margin: 0 }}>
+            Hoy todavia no hay ninguno.
+          </p>
+        ) : (
+          <ul>
+            {robot.tokens.map((t) => (
+              <li key={`${t.chain}:${t.address}`}>
+                <Link to={`/token/${t.chain}/${t.address}${robot.id === 'robot3' ? '#decision-robot3' : ''}`} className="robot-card__token">
+                  {t.symbol ?? t.address.slice(0, 6)}
+                </Link>
+                <Badge tono={t.tono}>{t.etiqueta}</Badge>
+                <span className="robot-card__detalle">{t.detalle}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <Link to={robot.rutaLista} className="robot-card__link small">
+          Ver la lista completa de hoy <ArrowRight />
+        </Link>
+      </div>
+
       {robot.nota && <p className="robot-card__note">{robot.nota}</p>}
 
       <div className="robot-card__foot">

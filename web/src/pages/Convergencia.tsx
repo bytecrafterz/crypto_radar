@@ -139,10 +139,10 @@ function TarjetaVeredicto({ v }: { v: Veredicto }) {
 }
 
 export default function Convergencia() {
-  const { valores, cambiar, page } = useFiltrosUrl(['nivel'] as const, { size: '12' });
+  const { valores, cambiar, page } = useFiltrosUrl(['nivel', 'periodo'] as const, { size: '12' });
   const size = Number(valores.size) || 12;
   const resumen = useApi<ConvergenciaResumen>('/api/panel/convergencia', { refrescoMs: 60_000 });
-  const lista = useApi<ListaVeredictos>(conParams('/api/panel/convergencia/veredictos', { nivel: valores.nivel, page, size }), {
+  const lista = useApi<ListaVeredictos>(conParams('/api/panel/convergencia/veredictos', { nivel: valores.nivel, periodo: valores.periodo, page, size }), {
     mantenerAnterior: true,
   });
   const r = resumen.data;
@@ -200,13 +200,22 @@ export default function Convergencia() {
 
       <Section
         title="Veredictos"
+        sub={valores.periodo === 'hoy' ? 'Tokens que el Robot 3 cruzo hoy: veredicto nuevo o cambio de nivel.' : undefined}
         actions={
-          <Segmented
-            label="Nivel"
-            value={valores.nivel || 'todos'}
-            onChange={(v) => cambiar({ nivel: v === 'todos' ? '' : v })}
-            options={[{ value: 'todos', label: 'Todos' }, ...ORDEN_NIVELES.map((n) => ({ value: n, label: NIVELES[n].texto }))]}
-          />
+          <>
+            <Segmented
+              label="Periodo"
+              value={valores.periodo || 'todo'}
+              onChange={(v) => cambiar({ periodo: v === 'todo' ? '' : v })}
+              options={[{ value: 'hoy', label: 'Hoy' }, { value: 'todo', label: 'Todo' }]}
+            />
+            <Segmented
+              label="Nivel"
+              value={valores.nivel || 'todos'}
+              onChange={(v) => cambiar({ nivel: v === 'todos' ? '' : v })}
+              options={[{ value: 'todos', label: 'Todos' }, ...ORDEN_NIVELES.map((n) => ({ value: n, label: NIVELES[n].texto }))]}
+            />
+          </>
         }
       >
         {lista.error && !lista.data ? (

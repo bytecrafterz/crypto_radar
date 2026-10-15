@@ -26,6 +26,99 @@ export interface ResumenRobot {
   cifras: Array<{ etiqueta: string; valor: number }>;
   nota: string | null;
   ruta: string;
+  /** Cuales son: los tokens de hoy de este robot, los mas destacados primero. */
+  tokens: TokenDeRobot[];
+  /** La lista completa de hoy en el panel. */
+  rutaLista: string;
+}
+
+export interface TokenDeRobot {
+  symbol: string | null;
+  chain: string;
+  address: string;
+  etiqueta: string;
+  tono: 'good' | 'warning' | 'critical' | 'info' | 'neutral';
+  detalle: string;
+}
+
+/**
+ * Que cuenta como "cruzado hoy" por el Robot 3: veredicto nuevo hoy o que
+ * cambio de nivel hoy. Asi un token que sube a Convergencia hoy sale aunque
+ * se mencionara por primera vez ayer. Lo usan la tarjeta, el bot y el panel.
+ */
+export const R3_HOY = `(c.creado_at >= CURRENT_DATE OR EXISTS (
+  SELECT 1 FROM tg_candidatos_historial h WHERE h.candidato_id = c.id AND h.ts >= CURRENT_DATE))`;
+
+const ESTADO_TOKEN: Record<string, { texto: string; tono: TokenDeRobot['tono'] }> = {
+  nuevo: { texto: 'Nuevo', tono: 'info' },
+  vigilado: { texto: 'Vigilado', tono: 'good' },
+  alertado: { texto: 'Avisado', tono: 'good' },
+  peligro: { texto: 'Peligro', tono: 'critical' },
+  descartado: { texto: 'Descartado', tono: 'neutral' },
+  archivado: { texto: 'Archivado', tono: 'neutral' },
+};
+
+const NIVEL: Record<string, { texto: string; tono: TokenDeRobot['tono'] }> = {
+  rojo: { texto: 'Convergencia fuerte', tono: 'critical' },
+  naranja: { texto: 'Convergencia', tono: 'warning' },
+  amarillo: { texto: 'Seguimiento', tono: 'info' },
+  descartado: { texto: 'Descartado', tono: 'neutral' },
+};
+
+const entero = (v: unknown) => (v === null || v === undefined ? 'n/d' : String(Math.round(Number(v))));
+
+/** Los tokens de hoy de cada robot, los mas destacados primero. */
+export async function tokensDeHoy(robot: ResumenRobot['id'], limite: number): Promise<TokenDeRobot[]> {
+  if (robot === 'robot1') {
+    const filas = await query<{ symbol: string | null; chain: string; address: string; last_opportunity: unknown; last_risk: unknown; status: string }>(
+      `SELECT symbol, chain, address, last_opportunity, last_risk, status FROM tokens
+        WHERE enriched_at >= CURRENT_DATE
+        ORDER BY last_opportunity DESC NULLS LAST, enriched_at DESC LIMIT $1`,
+      [limite],
+    );
+    return filas.map((f) => ({
+      symbol: f.symbol, chain: f.chain, address: f.address,
+      etiqueta: ESTADO_TOKEN[f.status]?.texto ?? f.status,
+      tono: ESTADO_TOKEN[f.status]?.tono ?? 'neutral',
+      detalle: `oportunidad ${entero(f.last_opportunity)} · riesgo ${entero(f.last_risk)}`,
+    }));
+  }
+  if (robot === 'robot2') {
+    const filas = await query<{ symbol: string | null; chain: string; address: string; menciones: number; canales: number }>(
+      `SELECT me.chain, me.address, t.symbol,
+              COUNT(*)::int AS menciones, COUNT(DISTINCT me.channel_id)::int AS canales, MAX(me.posted_at) AS ultima
+         FROM tg_mentions me
+         LEFT JOIN tokens t ON t.chain = me.chain AND t.address = me.address
+        WHERE me.posted_at >= CURRENT_DATE
+        GROUP BY me.chain, me.address, t.symbol
+        ORDER BY canales DESC, menciones DESC, ultima DESC LIMIT $1`,
+      [limite],
+    );
+    return filas.map((f) => ({
+      symbol: f.symbol, chain: f.chain, address: f.address,
+      etiqueta: f.canales === 1 ? '1 canal' : `${f.canales} canales`,
+      tono: f.canales >= 2 ? 'good' : 'neutral',
+      detalle: f.menciones === 1 ? '1 mencion hoy' : `${f.menciones} menciones hoy`,
+    }));
+  }
+  const filas = await query<{
+    symbol: string | null; chain: string; address: string; nivel: string;
+    score_tecnica: unknown; score_riesgo: unknown; fuentes_indep: number; enviado_at: Date | null;
+  }>(
+    `SELECT c.chain, c.address, t.symbol, c.nivel, c.score_tecnica, c.score_riesgo, c.fuentes_indep, c.enviado_at
+       FROM tg_candidatos c
+       LEFT JOIN tokens t ON t.chain = c.chain AND t.address = c.address
+      WHERE ${R3_HOY}
+      ORDER BY CASE c.nivel WHEN 'rojo' THEN 0 WHEN 'naranja' THEN 1 WHEN 'amarillo' THEN 2 ELSE 3 END,
+               c.score_tecnica DESC NULLS LAST LIMIT $1`,
+    [limite],
+  );
+  return filas.map((f) => ({
+    symbol: f.symbol, chain: f.chain, address: f.address,
+    etiqueta: (NIVEL[f.nivel]?.texto ?? f.nivel) + (f.enviado_at ? ' · avisado' : ''),
+    tono: NIVEL[f.nivel]?.tono ?? 'neutral',
+    detalle: `oportunidad ${entero(f.score_tecnica)} · riesgo ${entero(f.score_riesgo)} · ${f.fuentes_indep} fuente(s)`,
+  }));
 }
 
 /** Que tareas son de cada robot. Las del sistema (vigilante, consumo) no cuentan. */
@@ -110,7 +203,7 @@ export async function resumenRobots(): Promise<ResumenRobot[]> {
     ),
     Promise.all([
       query<{ nivel: string; n: number }>(
-        `SELECT nivel, COUNT(*)::int AS n FROM tg_candidatos WHERE creado_at > CURRENT_DATE GROUP BY nivel`,
+        `SELECT c.nivel, COUNT(*)::int AS n FROM tg_candidatos c WHERE ${R3_HOY} GROUP BY c.nivel`,
       ),
       queryOne<{ avisos: number; ultimo: Date | null }>(
         `SELECT COUNT(*) FILTER (WHERE enviado_at > CURRENT_DATE)::int AS avisos, MAX(enviado_at) AS ultimo
@@ -122,6 +215,11 @@ export async function resumenRobots(): Promise<ResumenRobot[]> {
   // Un robot sin bucles en este proceso puede estar corriendo en otro: se
   // le juzga por los latidos que deja en la base de datos.
   const remotas = await tareasDeOtrosProcesos(new Set(tareas.map((t) => t.nombre)));
+  const [lista1, lista2, lista3] = await Promise.all([
+    tokensDeHoy('robot1', 5),
+    tokensDeHoy('robot2', 5),
+    tokensDeHoy('robot3', 5),
+  ]);
   const de = (id: ResumenRobot['id']) => {
     const locales = tareas.filter((t) => TAREAS[id](t.nombre));
     return estadoDeRobot(locales.length > 0 ? locales : remotas.filter((t) => TAREAS[id](t.nombre)));
@@ -144,6 +242,8 @@ export async function resumenRobots(): Promise<ResumenRobot[]> {
       ],
       nota: `${fmtNum(stats.tracked)} tokens en seguimiento ahora mismo.`,
       ruta: '/tokens',
+      tokens: lista1,
+      rutaLista: '/tokens?periodo=hoy&orden=oportunidad',
     },
     {
       id: 'robot2',
@@ -158,6 +258,8 @@ export async function resumenRobots(): Promise<ResumenRobot[]> {
       ],
       nota: 'No envia avisos propios: lo que encuentra lo analiza el Robot 1 y lo cruza el Robot 3.',
       ruta: '/telegram',
+      tokens: lista2,
+      rutaLista: '/telegram?vista=menciones&periodo=hoy',
     },
     {
       id: 'robot3',
@@ -174,6 +276,8 @@ export async function resumenRobots(): Promise<ResumenRobot[]> {
         ? `Es muy exigente a proposito: solo avisa en convergencia fuerte. Ultimo aviso: ${fechaCorta(new Date(avisosR3.ultimo))}.`
         : 'Es muy exigente a proposito: solo avisa en convergencia fuerte. Aun no ha enviado ninguno.',
       ruta: '/convergencia',
+      tokens: lista3,
+      rutaLista: '/convergencia?periodo=hoy',
     },
   ];
 }
