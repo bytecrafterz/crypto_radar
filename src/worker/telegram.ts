@@ -295,14 +295,23 @@ function registerCommands(b: Bot): void {
 //  Arranque
 // --------------------------------------------------------------------------
 
-export async function startTelegram(): Promise<void> {
+export async function startTelegram(escuchar = true): Promise<void> {
   if (!env.telegramToken) {
     log.warn('sin TELEGRAM_BOT_TOKEN: el bot no arranca (el resto del sistema si funciona)');
     return;
   }
-  if (started) return;
+  if (bot) return;
 
   bot = new Bot(env.telegramToken);
+
+  // Con los robots en varios procesos (ROBOTS=...), solo uno puede atender
+  // los comandos: dos procesos pidiendo mensajes con el mismo bot chocan
+  // (error 409 de Telegram). Los demas solo envian avisos, y para enviar no
+  // hace falta escuchar.
+  if (!escuchar) {
+    log.info('bot de avisos solo para enviar: los comandos los atiende el proceso del Robot 1');
+    return;
+  }
   registerCommands(bot);
 
   try {

@@ -147,7 +147,8 @@ export async function startWorker(): Promise<void> {
   const warnings = checkEnv();
   for (const w of warnings) log.warn(w);
 
-  await startTelegram();
+  // Los comandos del bot los atiende el proceso que lleva el Robot 1.
+  await startTelegram(robots.has(1));
 
   const filters = getFilters();
 
