@@ -61,6 +61,6 @@ Es la lista de la seccion 5 de la peticion, con donde se comprueba cada punto:
 | Bases de datos | Documento 4 y `anexos/esquema.sql`; la copia completa de la base de datos se hace cada noche en el servidor |
 | Reglas con su ubicacion | Documentos 1, 2 y 3, apartado "Reglas"; en el panel, cada regla del Robot 3 dice donde esta definida |
 | Instrucciones de ejecucion y registros | Documento 5 |
-| Consultar cada robot por separado | Panel: Tokens y Alertas (Robot 1), Telegram (Robot 2), Convergencia (Robot 3); tarjetas de estado en la portada; comando `/robots` en Telegram |
+| Consultar cada robot por separado | Panel: Tokens y Alertas (Robot 1), Telegram (Robot 2), Convergencia (Robot 3), con el filtro "Hoy"; en la portada, una tarjeta por robot con su estado y la lista "Cuales son (hoy)" de sus tokens; en Telegram, `/robots` y la lista de cada robot con `/robot1`, `/robot2` y `/robot3` |
 | Ver la comparacion real del Robot 3 | Panel: ficha de cualquier token evaluado, seccion "Decision del Robot 3" |
 | Seguir una decision hasta el codigo, la configuracion y los registros | Documento 6 (HIGGS) y, en el panel, el apartado "Para revisarlo en el codigo y en la base de datos" de cada decision |
